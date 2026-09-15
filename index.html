@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sakurajima Ashfall Sandbox</title>
+<meta name="description" content="Interactive tephra advection-diffusion model for Sakurajima volcano on real GSI terrain.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230c1014'/%3E%3Cpath d='M4 26 L13 8 L19 8 L28 26 Z' fill='%23b4551c'/%3E%3Cpath d='M13 8 L19 8 L21 12 L11 12 Z' fill='%23f8d271'/%3E%3C/svg%3E">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Tephra transport &amp; deposition · GSI elevation model</span>
+  <h1>Sakurajima Ashfall Sandbox</h1>
+  <p class="sub">Set an eruption and a wind field, watch the plume bend and the deposit drape over real terrain.
+  Analytical advection&ndash;diffusion with Reynolds-dependent settling, after Suzuki (1983) and Tephra2.
+  <a href="https://github.com/">Physics, validation and limitations are in the README</a>.</p>
+</header>
+
+<div class="rig">
+  <div class="col-view">
+    <div class="panel">
+      <div id="scene">
+        <div id="labels"></div>
+        <div class="badge">Sakurajima · Minamidake</div>
+        <div class="views">
+          <button data-v="oblique" type="button">Oblique</button>
+          <button data-v="top" type="button">Plan</button>
+          <button data-v="city" type="button">From city</button>
+        </div>
+        <div class="ramp">
+          <div class="cap">Deposit thickness</div>
+          <div class="bar"></div>
+          <div class="lbl"><span>0.001 mm</span><span>1</span><span>1000+</span></div>
+        </div>
+        <div id="loading">Loading terrain&hellip;</div>
+        <!-- Classic script, so it still runs when the module below is blocked.
+             Opening this file directly from disk fails: browsers refuse to load
+             ES modules over file://, and so does the terrain image. -->
+        <script>
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            if (window.__ash) return;
+            var el = document.getElementById('loading');
+            if (!el || el.classList.contains('gone')) return;
+            el.style.textTransform = 'none';
+            el.style.letterSpacing = 'normal';
+            el.style.fontSize = '0.82rem';
+            el.style.lineHeight = '1.6';
+            el.style.maxWidth = '34em';
+            el.innerHTML = location.protocol === 'file:'
+              ? '<b>This page has to be served over http.</b><br><br>'
+                + 'Browsers block ES modules on file:// URLs.<br><br>'
+                + 'Run <code>npm start</code> and open localhost:8000,<br>'
+                + 'or use the standalone build: <code>npm run bundle</code><br>'
+                + 'then open <code>dist/index.html</code>, which does work by double-click.'
+              : 'Nothing loaded. Check the browser console.';
+          }, 1500);
+        });
+        </script>
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="cell">
+        <div class="k">Kagoshima city</div>
+        <div class="v" id="r-kago">–</div>
+        <div class="u">mm · <span id="r-kago-l">–</span></div>
+        <div class="dmg" id="r-kago-d"></div>
+      </div>
+      <div class="cell">
+        <div class="k">Kagoshima airport</div>
+        <div class="v" id="r-air">–</div>
+        <div class="u">mm · <span id="r-air-l">–</span></div>
+        <div class="dmg" id="r-air-d"></div>
+      </div>
+      <div class="cell">
+        <div class="k">Peak deposit</div>
+        <div class="v" id="r-max">–</div>
+        <div class="u">mm · <span id="r-max-l">–</span></div>
+        <div class="dmg" id="r-max-d"></div>
+      </div>
+      <div class="cell">
+        <div class="k">Area &gt; 1 mm</div>
+        <div class="v" id="r-a1">–</div>
+        <div class="u">km²</div>
+        <div class="s" id="r-bal">–</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-ctl">
+    <div class="ctl">
+      <h3>Scenario</h3>
+      <div class="presets">
+        <button class="p" data-preset="routine" type="button">Routine vulcanian</button>
+        <button class="p" data-preset="large" type="button">Large explosion</button>
+        <button class="p" data-preset="taisho" type="button">Taishō 1914 scale</button>
+        <button class="p" data-preset="summer" type="button">Wind onto city</button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <h3>Eruption source</h3>
+      <div class="field">
+        <div class="top"><label for="s-h">Plume height above vent</label><span class="val" id="v-h"></span></div>
+        <input type="range" id="s-h" min="1" max="25" step="0.5">
+      </div>
+      <div class="field">
+        <div class="top"><label for="s-m">Erupted mass</label><span class="val" id="v-m"></span></div>
+        <input type="range" id="s-m" min="0" max="100" step="1">
+      </div>
+      <div class="derived" id="d-dur">
+        <span class="dk">Implied duration <em>Mastin</em></span>
+        <span class="dv" id="v-dur">–</span>
+      </div>
+      <div class="field">
+        <div class="top"><label for="s-phi">Median grain size</label><span class="val" id="v-phi"></span></div>
+        <input type="range" id="s-phi" min="-2" max="5" step="0.1">
+      </div>
+      <div class="field">
+        <div class="top"><label for="s-sig">Sorting (σφ)</label><span class="val" id="v-sig"></span></div>
+        <input type="range" id="s-sig" min="0.4" max="3" step="0.1">
+      </div>
+      <div class="field">
+        <div class="top"><label for="s-suz">Column mass peak</label><span class="val" id="v-suz"></span></div>
+        <input type="range" id="s-suz" min="1" max="12" step="0.5">
+      </div>
+    </div>
+
+    <div class="ctl">
+      <h3>Wind field</h3>
+      <div class="field">
+        <div class="top"><label for="s-dir">Wind from</label><span class="val" id="v-dir"></span></div>
+        <input type="range" id="s-dir" min="0" max="359" step="1">
+      </div>
+      <div class="field">
+        <div class="top"><label for="s-spd">Speed at 2 km</label><span class="val" id="v-spd"></span></div>
+        <input type="range" id="s-spd" min="0" max="40" step="1">
+      </div>
+      <div class="field">
+        <div class="top"><label for="s-top">Speed at 12 km</label><span class="val" id="v-top"></span></div>
+        <input type="range" id="s-top" min="0" max="80" step="1">
+      </div>
+      <div class="field">
+        <div class="top"><label for="s-shr">Directional shear</label><span class="val" id="v-shr"></span></div>
+        <input type="range" id="s-shr" min="-120" max="120" step="5">
+      </div>
+    </div>
+
+    <div class="ctl">
+      <h3>View &amp; deposit</h3>
+      <div class="field">
+        <div class="top"><label for="s-ex">Vertical exaggeration</label><span class="val" id="v-ex"></span></div>
+        <input type="range" id="s-ex" min="1" max="12" step="0.5">
+      </div>
+      <div class="field">
+        <div class="top"><label for="s-k">Eddy diffusivity K</label><span class="val" id="v-k"></span></div>
+        <input type="range" id="s-k" min="100" max="20000" step="100">
+      </div>
+      <div class="field">
+        <div class="top"><label for="s-rho">Deposit bulk density</label><span class="val" id="v-rho"></span></div>
+        <input type="range" id="s-rho" min="400" max="2000" step="50">
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="t-part" checked> Plume</label>
+        <label><input type="checkbox" id="t-cont" checked> Isopachs</label>
+        <label><input type="checkbox" id="t-spin"> Rotate</label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p>Elevation: GSI 標高タイル (Geospatial Information Authority of Japan), zoom 12, resampled.
+  Model after Suzuki (1983) and the Tephra2 formulation of Connor and colleagues; settling velocity after
+  Bonadonna and colleagues (1998); plume height to eruption rate after Mastin and colleagues (2009);
+  damage thresholds after Blong and colleagues (2017).</p>
+</footer>
+
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
