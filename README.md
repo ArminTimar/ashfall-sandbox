@@ -40,6 +40,10 @@ That flattens the modules, inlines the stylesheet, embeds the DEM as a data URI
 and bundles three.js, so `dist/index.html` runs from disk with no server and no
 network. It is also the thing to hand someone who just wants to look at it.
 
+`dist/` is generated and therefore not in version control. A prebuilt copy is
+attached to each [release](https://github.com/ArminTimar/ashfall-sandbox/releases)
+if you would rather not build it yourself.
+
 Run the checks with:
 
 ```bash
