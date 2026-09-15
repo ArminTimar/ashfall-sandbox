@@ -4,10 +4,10 @@ import { P } from './params.js';
 import { field, stats, compute } from './physics.js';
 import { loadTerrain } from './terrain.js';
 import { initTexture, paintTexture, fieldTex } from './texture.js';
-import { seedParticles, parts, partXY } from './particles.js';
+import { seedParticles, replayEruption, parts, partXY, clock } from './particles.js';
 import { initScene, renderFrame, resize, setView, applyExaggeration, markTextureDirty, setPlumeVisible, addVectors, setVectorLayer } from './scene.js';
 import { loadVectors } from './vectors.js';
-import { bindUI, syncInputs, syncLabels, updateReadout } from './ui.js';
+import { bindUI, syncInputs, syncLabels, syncMode, updateClock, updateReadout } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const showContours = () => $('t-cont').checked;
@@ -19,10 +19,14 @@ function recompute({ reseed = true } = {}) {
   updateReadout();
   syncLabels();
   // The deposit is a steady-state solution and snaps to the new parameters at
-  // once. Particles carry drift accumulated under the previous wind, so without
-  // a reseed the cloud keeps pointing the old way while the ground below it
+  // once. A steady cloud carries drift accumulated under the previous wind, so
+  // without a reseed it keeps pointing the old way while the ground below it
   // already shows the new answer.
-  if (reseed && parts.length) seedParticles();
+  //
+  // An eruption run is deliberately left alone: it is a single event playing
+  // out in time, and restarting it on every slider movement would make it
+  // impossible to watch. Use Replay to start a new one under the new numbers.
+  if (reseed && P.mode !== 'eruption' && parts.length) seedParticles();
 }
 
 let pending = null;
@@ -37,6 +41,7 @@ function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   renderFrame(dt, { spin: $('t-spin').checked });
+  if (P.mode === 'eruption') updateClock();
   requestAnimationFrame(frame);
 }
 
@@ -54,6 +59,7 @@ Promise.all([
   initScene($('scene'));
   if (vectors) addVectors(vectors);
   syncInputs();
+  syncMode();
   recompute({ reseed: false });
   seedParticles();
   $('loading').classList.add('gone');
@@ -64,6 +70,9 @@ Promise.all([
     onExaggeration: applyExaggeration,
     onPreset: () => recompute(),
     onView: setView,
+    onReplay: () => {
+      if (P.mode === 'eruption') replayEruption(); else seedParticles();
+    },
     onToggle: () => {
       const on = $('t-part').checked;
       setPlumeVisible(on);
@@ -79,8 +88,8 @@ Promise.all([
   // Dev hook: lets you check that the field, the drawn copy and the particle
   // cloud agree. See test/ for the automated versions.
   window.__ash = {
-    P, field, fieldTex, parts: () => parts, partXY,
-    stats: () => stats, recompute
+    P, field, fieldTex, parts: () => parts, partXY, clock,
+    stats: () => stats, recompute, seedParticles, replayEruption
   };
 }).catch((err) => {
   $('loading').textContent = 'Terrain failed to load — is this being served over http?';

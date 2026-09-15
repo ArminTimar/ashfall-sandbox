@@ -331,3 +331,24 @@ footer p { color: var(--muted); max-width: none; }
 .toggles.map .sw.road { color: #d9cfbe; }
 .toggles.map .sw.rail { color: #7fc7e8; border-top-style: dashed; }
 .toggles.map .sw.city { color: #f0b45c; }
+
+/* Plume animation block: mode switch, the eruption-only controls and the run
+   clock. The eruption controls stay in the flow in both modes but go quiet in
+   continuous mode, so the panel does not jump height when you switch. */
+.modes { margin-bottom: 9px; }
+button.p[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.note {
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.erupt-only { transition: opacity 0.18s; }
+.erupt-only.off { opacity: 0.32; pointer-events: none; }
+.replay { display: flex; align-items: center; gap: 10px; }
+.replay button.p { flex: 0 0 auto; }
+.replay .val { font-variant-numeric: tabular-nums; }

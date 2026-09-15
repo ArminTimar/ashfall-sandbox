@@ -189,7 +189,10 @@ export function resize() {
 export function renderFrame(dt, opts) {
   if (opts.spin && !dragging) orbit.az += dt * 0.09;
   if (points.visible) {
-    stepParticles(dt * 45, ppos, pcol);
+    // An eruption run empties the sky, so only the written slots are drawn;
+    // the rest of the buffer holds stale positions and must not be rendered.
+    const n = stepParticles(dt * P.rate, ppos, pcol);
+    pgeo.setDrawRange(0, n);
     pgeo.attributes.position.needsUpdate = true;
     pgeo.attributes.color.needsUpdate = true;
   }

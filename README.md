@@ -130,8 +130,10 @@ These matter if you are comparing against anything real.
   time exceeds its `FALL_TIME_THRESHOLD`. Distal fine ash is too concentrated here.
 - **No umbrella cloud.** Large eruptions spread radially at the neutral buoyancy
   level before the wind takes over, so strong plumes are too narrow near the vent.
-- **Steady wind.** One profile for the whole eruption. Real deposits from
-  multi-hour eruptions record the wind rotating underneath them.
+- **Steady wind.** One profile for the whole eruption, interpolated between a
+  2 km and a 12 km value with a linear directional shear. Real deposits from
+  multi-hour eruptions record the wind rotating underneath them, and a real
+  sounding has structure this two-point profile cannot represent.
 - **No ash aggregation.** Fine ash clumps and falls like much larger particles,
   producing secondary thickness maxima tens of kilometres downwind.
 - **Terrain is scenery.** The deposit is draped onto the DEM, not computed
@@ -164,6 +166,29 @@ would complete one:
 
 Sort the annual losses and the exceedance probability curve falls out.
 
+Nearer term, in rough order of how much each would change the answer:
+
+1. **A real wind profile.** Levels with their own speed and direction instead of
+   two endpoints and a linear twist, fed from a sounding or an ERA5 column.
+   `windAt(z)` is the only thing that would have to change, and the particle and
+   field solvers both go through it.
+2. **Wind that varies during the eruption.** `windAt(z)` becomes `windAt(z, t)`.
+   The particle view can use it immediately, since it already integrates in
+   time. The analytical field cannot — a steady-state Gaussian assumes one wind
+   for all time — so this is the point where the deposit has to become an
+   accumulation over the eruption rather than a closed-form solution.
+3. **Umbrella cloud.** Radial spreading at the neutral buoyancy level before the
+   wind takes over, which is the main reason strong plumes are too narrow near
+   the vent here.
+4. **Another volcano.** The domain is already generated rather than hard-coded:
+   `tools/build_terrain.py` will build a DEM for any window, and
+   `tools/build_vectors.py` takes roads and boundaries from OpenStreetMap
+   anywhere on earth. What is still Sakurajima-specific is the GSI elevation
+   source, which only covers Japan, plus the vent position, summit height and
+   presets in `js/params.js`. Swapping the elevation source for SRTM or
+   Copernicus DEM and moving those constants into a per-volcano file is the
+   shape of it.
+
 ## Layout
 
 ```
@@ -183,6 +208,7 @@ data/terrain.png        packed DEM, see below
 data/vectors.json       roads, railways, city limit, in model km
 tools/build_terrain.py  rebuilds data/terrain.png from GSI tiles
 tools/build_vectors.py  rebuilds data/vectors.json from OpenStreetMap
+requirements.txt        python deps for build_terrain.py (see below)
 tools/serve.mjs         zero-dependency static server
 tools/bundle.mjs        flattens everything into dist/index.html
 test/                   node test scripts
@@ -204,7 +230,12 @@ not export a binding you reassign later.
 | R, G | elevation in decimetres, big-endian: `elev_m = ((R << 8) \| G) / 10` |
 | B | land fraction, 0 = sea, 255 = land |
 
-Rebuild it with `npm run terrain` (needs `numpy` and `Pillow`). The GSI tiles
+Rebuild it with `npm run terrain`, after `pip install -r requirements.txt`.
+numpy is capped below 2.5 there: Windows machines with Smart App Control on
+refuse to load the 2.5.x extension module (`An Application Control policy has
+blocked this file`) because that build has not yet earned a reputation with the
+service. 2.4.2 loads under the same policy, and nothing in the script depends on
+the version. The GSI tiles
 return `"e"` for no-data, which over Kagoshima Bay means water, so the land mask
 comes from the DEM itself and the coastline is real rather than drawn. The tiles
 are public and need no key.
@@ -229,6 +260,33 @@ recomposited under the ash on every parameter change.
 Place labels are held as longitude and latitude in `js/params.js` and their
 kilometre offsets are derived. They used to be kilometres typed by hand, which
 is how Tarumizu ended up 1.5 km from the town it names.
+
+## Plume animation
+
+The falling particles have two modes, and they answer different questions.
+
+**Continuous** is a cloud that has been erupting long enough to reach a steady
+state. Particles are recycled forever, so the picture never changes character.
+This is the one that corresponds to the deposit underneath it, which is itself a
+steady-state solution.
+
+**Single eruption** plays one eruption of a set length at a set speed. Particles
+are released over that window and then emission stops, so the column dies back,
+the cloud drifts off and the sky empties. The deposit shown underneath is still
+the steady-state answer, not an accumulation of this run.
+
+Every parameter change re-seeds the continuous cloud, because the deposit field
+snaps to the new numbers instantly and a cloud left alone would keep pointing
+the old way. That re-seed therefore has to be statistically identical to the
+cloud it replaces, or it reads as a flash at the vent on every slider movement.
+Getting that right is more finicky than it sounds — see the comments in
+`js/particles.js` and the guard in `test/particles.mjs`, which runs the steady
+scheme to equilibrium and checks a fresh seed against it across four grain-size
+and wind regimes. An eruption run is deliberately *not* re-seeded by parameter
+changes; use **Replay** to start a new one.
+
+Playback speed and eruption length are presentation only. Neither touches the
+deposit field.
 
 ## References
 

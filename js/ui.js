@@ -2,6 +2,7 @@
 
 import { P, PLACES, applyPreset } from './params.js';
 import { TOGGLES } from './vectors.js';
+import { NP, clock } from './particles.js';
 import { stats, sampleAt, mastinMER } from './physics.js';
 
 const $ = (id) => document.getElementById(id);
@@ -74,6 +75,38 @@ function dirName(d) {
   return nm[Math.round(d / 22.5) % 16];
 }
 
+const MODE_NOTE = {
+  steady: 'A cloud that has been erupting long enough to reach a steady state. '
+        + 'This is the one that matches the deposit below, which is itself a '
+        + 'steady-state solution.',
+  eruption: 'One eruption of a set length, played out in time. The column dies '
+        + 'back when it ends and the sky empties. The deposit below still shows '
+        + 'the steady-state answer, not this run.'
+};
+
+/** Show the mode switch, and grey out the controls the other mode ignores. */
+export function syncMode() {
+  for (const b of document.querySelectorAll('button.p[data-mode]')) {
+    b.setAttribute('aria-pressed', String(b.dataset.mode === P.mode));
+  }
+  $('mode-note').textContent = MODE_NOTE[P.mode] || '';
+  for (const el of document.querySelectorAll('.erupt-only')) {
+    el.classList.toggle('off', P.mode !== 'eruption');
+  }
+  updateClock();
+}
+
+/** The eruption run clock. Cheap, so main.js calls it every frame. */
+export function updateClock() {
+  const el = $('v-clock');
+  if (!el) return;
+  if (P.mode !== 'eruption') { el.textContent = ''; return; }
+  const pct = Math.min(100, Math.round((clock.released / NP) * 100));
+  el.textContent = clock.done
+    ? 'settled at ' + fmtDur(clock.t)
+    : `${fmtDur(clock.t)} · ${pct}% released · ${clock.active} aloft`;
+}
+
 export function syncLabels() {
   $('v-h').textContent = P.H.toFixed(1) + ' km';
   $('v-m').textContent = expFmt(Math.pow(10, P.logM)) + ' kg';
@@ -94,11 +127,15 @@ export function syncLabels() {
   $('v-k').textContent = P.K.toLocaleString() + ' m²/s';
   $('v-rho').textContent = P.rho + ' kg/m³';
   $('v-ex').textContent = '×' + P.ex.toFixed(1);
+  $('v-rate').textContent = '×' + P.rate + ' · 1 s = ' + fmtDur(P.rate);
+  $('v-elen').textContent = fmtDur(P.dur);
 }
 
 export function syncInputs() {
   for (const [id, key] of SLIDERS) $(id).value = P[key];
   $('s-ex').value = P.ex;
+  $('s-rate').value = P.rate;
+  $('s-elen').value = P.dur;
   $('s-m').value = ((P.logM - 5) / 7) * 100;
 }
 
@@ -126,7 +163,7 @@ export function updateReadout() {
 /**
  * Wire the controls.
  * @param {object} handlers
- *   { onModel, onExaggeration, onPreset, onView, onToggle, onLayer }
+ *   { onModel, onExaggeration, onPreset, onView, onToggle, onLayer, onReplay }
  */
 export function bindUI(handlers) {
   for (const [id, key] of SLIDERS) {
@@ -144,6 +181,25 @@ export function bindUI(handlers) {
     syncLabels();
     handlers.onExaggeration();
   });
+  // Playback speed and eruption length are presentation, not physics: they
+  // change how the cloud is animated and nothing the deposit field depends on,
+  // so neither triggers a recompute.
+  $('s-rate').addEventListener('input', function () {
+    P.rate = parseFloat(this.value);
+    syncLabels();
+  });
+  $('s-elen').addEventListener('input', function () {
+    P.dur = parseFloat(this.value);
+    syncLabels();
+  });
+  $('b-replay').addEventListener('click', () => handlers.onReplay());
+  for (const b of document.querySelectorAll('button.p[data-mode]')) {
+    b.addEventListener('click', () => {
+      P.mode = b.dataset.mode;
+      syncMode();
+      handlers.onReplay();
+    });
+  }
   for (const b of document.querySelectorAll('button.p')) {
     b.addEventListener('click', () => {
       if (applyPreset(b.dataset.preset)) { syncInputs(); handlers.onPreset(); }

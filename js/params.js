@@ -53,6 +53,7 @@ export const PLACES = [
   { n: 'Kagoshima',         lon: 130.55719, lat: 31.59679, key: 'kago' },
   { n: 'Kagoshima Airport', lon: 130.71944, lat: 31.80325, key: 'air' },
   { n: 'Tarumizu',          lon: 130.70123, lat: 31.49269 },
+  { n: 'Aira',              lon: 130.62766, lat: 31.72828 },
   { n: 'Kirishima',         lon: 130.76324, lat: 31.74101 }
 ].map((p) => Object.assign(p, { x: lonToX(p.lon), y: latToY(p.lat) }));
 
@@ -71,11 +72,15 @@ export const PLACES = [
  *   K      eddy diffusivity, m^2/s
  *   rho    deposit bulk density, kg/m^3 (thickness conversion only)
  *   ex     vertical exaggeration for display only
+ *   mode   particle display: 'steady' or 'eruption' (display only)
+ *   rate   model seconds per wall-clock second (display only)
+ *   dur    eruption length in model seconds, 'eruption' mode only
  */
 export const P = {
   H: 5, logM: 8.3, phi: 2.0, sig: 1.5, suz: 4,
   dir: 100, spd: 12, top: 24, shear: -15,
-  K: 2500, rho: 1000, ex: 4
+  K: 2500, rho: 1000, ex: 4,
+  mode: 'steady', rate: 45, dur: 1800
 };
 
 export const PRESETS = {

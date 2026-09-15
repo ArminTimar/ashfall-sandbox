@@ -1,0 +1,11 @@
+# Only tools/build_terrain.py needs these; tools/build_vectors.py is standard
+# library only. Install with:  python -m pip install -r requirements.txt
+#
+# numpy is capped below 2.5 on purpose. Windows machines with Smart App
+# Control enabled refuse to load the 2.5.x extension module — it fails with
+# "An Application Control policy has blocked this file" — because that build
+# has not yet earned a reputation with the service. 2.4.2 loads fine under the
+# same policy. Raise the cap once 2.5 is no longer being blocked; nothing in
+# the script depends on the version.
+numpy>=1.26,<2.5
+Pillow>=10.0
