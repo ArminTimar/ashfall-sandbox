@@ -87,6 +87,7 @@ here means the same thing as a `K` in a published Tephra2 inversion.
 | Wind | Speed interpolated between the 2 km and 12 km values, direction rotating linearly by the shear angle |
 | Source consistency | Mastin et al. (2009), `H = 2.00·V̇^0.241`, inverted to flag plume height and erupted mass that cannot belong to the same eruption |
 | Terrain | GSI 標高タイル zoom 12, 36 tiles, resampled to 320 × 320 over 50.0 × 49.6 km |
+| Map layers | OpenStreetMap trunk roads, railways and the Kagoshima city limit, clipped to the domain |
 | Damage thresholds | After Blong et al. (2017); nearly all building damage falls between 200 and 1000 mm |
 
 The falling particles are a Lagrangian view of the same model, not decoration.
@@ -174,11 +175,14 @@ js/grid.js              orientation flip and marching squares (pure, tested)
 js/terrain.js           DEM decode and elevation lookup
 js/texture.js           land/sea base, deposit raster, isopachs
 js/particles.js         Lagrangian cloud
+js/vectors.js           roads, rail and the city limit, draped on the DEM
 js/scene.js             three.js, camera, labels
 js/ui.js                sliders and readouts
 js/main.js              wiring
 data/terrain.png        packed DEM, see below
+data/vectors.json       roads, railways, city limit, in model km
 tools/build_terrain.py  rebuilds data/terrain.png from GSI tiles
+tools/build_vectors.py  rebuilds data/vectors.json from OpenStreetMap
 tools/serve.mjs         zero-dependency static server
 tools/bundle.mjs        flattens everything into dist/index.html
 test/                   node test scripts
@@ -206,7 +210,25 @@ comes from the DEM itself and the coastline is real rather than drawn. The tiles
 are public and need no key.
 
 If you move the window, the script prints the km bounds to paste into
-`js/params.js`.
+`js/params.js` — and rebuild `data/vectors.json` too, or the roads will sit in
+the wrong place. `npm test` checks that the two agree.
+
+## Map layers
+
+`data/vectors.json` holds the Kagoshima city limit, the motorway–primary and
+secondary road networks and the railways, already projected into the model's
+vent-relative kilometre frame, clipped to the domain and simplified to within
+50 m. Rebuild it with `npm run vectors`; it is standard library only, so unlike
+the terrain script it needs nothing installed.
+
+The lines are drawn as real geometry draped on the DEM rather than painted into
+the deposit texture. That texture is 320 px across 50 km — 156 m per pixel — so
+a road painted into it would be a 156 m-wide smear that also had to be
+recomposited under the ash on every parameter change.
+
+Place labels are held as longitude and latitude in `js/params.js` and their
+kilometre offsets are derived. They used to be kilometres typed by hand, which
+is how Tarumizu ended up 1.5 km from the town it names.
 
 ## References
 
@@ -221,4 +243,8 @@ If you move the window, the script prints the km bounds to paste into
 ## Licence
 
 MIT, see [LICENSE](LICENSE). Elevation data © Geospatial Information Authority of
-Japan, used under its terms of use.
+Japan, used under its terms of use. Roads, railways and administrative
+boundaries are © [OpenStreetMap](https://www.openstreetmap.org/copyright)
+contributors, licensed [ODbL 1.0](https://opendatacommons.org/licenses/odbl/) —
+if you reuse the rendered map or `data/vectors.json`, that attribution has to
+travel with it.

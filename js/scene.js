@@ -7,9 +7,10 @@
 
 import { N, KMW, KMH, XW, XE, YS, YN, PLACES, P } from './params.js';
 import { elev } from './terrain.js';
-import { elevAt } from './terrain.js';
+import { elevAtSmooth } from './terrain.js';
 import { NP, seedParticles, stepParticles } from './particles.js';
 import { getCanvas } from './texture.js';
+import { buildVectors, updateVectorHeights, setLayerVisible } from './vectors.js';
 
 // Module-private and assigned in initScene. Deliberately not exported: these
 // are reassigned after load, and exporting a binding that changes forces
@@ -47,7 +48,12 @@ export function initScene(hostEl) {
     pos.setX(i, pos.getX(i) + offX);
     pos.setZ(i, pos.getZ(i) + offZ);
   }
-  terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial());
+  terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+    // Push the filled surface a hair away from the camera so the roads and
+    // railways draped on it are not in a depth fight with the ground they
+    // follow.
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+  }));
   scene.add(terrain);
 
   tex = new THREE.CanvasTexture(getCanvas());
@@ -92,9 +98,16 @@ export function applyExaggeration() {
   }
   pos.needsUpdate = true;
   terrain.geometry.computeVertexNormals();
+  updateVectorHeights();
 }
 
 export function markTextureDirty() { if (tex) tex.needsUpdate = true; }
+
+/** Add the OpenStreetMap layers. Safe to skip; the scene works without them. */
+export function addVectors(doc) { return buildVectors(doc, scene); }
+
+/** Show or hide one vector layer by id. */
+export function setVectorLayer(id, on) { setLayerVisible(id, on); }
 
 /** Show or hide the falling-particle cloud. */
 export function setPlumeVisible(v) { if (points) points.visible = v; }
@@ -153,7 +166,7 @@ function buildLabels() {
 function updateLabels() {
   const w = host.clientWidth, h = host.clientHeight;
   for (const L of labelEls) {
-    const e = (elevAt(L.pl.x, L.pl.y) / 1000) * P.ex;
+    const e = (elevAtSmooth(L.pl.x, L.pl.y) / 1000) * P.ex;
     _v.set(L.pl.x, e + (L.pl.vent ? 0.4 : 0.15), -L.pl.y).project(cam);
     const vis = _v.z < 1 && Math.abs(_v.x) < 1.05 && Math.abs(_v.y) < 1.05;
     L.el.classList.toggle('on', vis);

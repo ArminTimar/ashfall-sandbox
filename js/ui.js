@@ -1,6 +1,7 @@
 // Sliders, presets and the numeric readouts.
 
 import { P, PLACES, applyPreset } from './params.js';
+import { TOGGLES } from './vectors.js';
 import { stats, sampleAt, mastinMER } from './physics.js';
 
 const $ = (id) => document.getElementById(id);
@@ -124,7 +125,8 @@ export function updateReadout() {
 
 /**
  * Wire the controls.
- * @param {object} handlers { onModel, onExaggeration, onPreset, onView, onToggle }
+ * @param {object} handlers
+ *   { onModel, onExaggeration, onPreset, onView, onToggle, onLayer }
  */
 export function bindUI(handlers) {
   for (const [id, key] of SLIDERS) {
@@ -152,4 +154,11 @@ export function bindUI(handlers) {
   }
   $('t-cont').addEventListener('change', handlers.onToggle);
   $('t-part').addEventListener('change', handlers.onToggle);
+
+  for (const t of TOGGLES) {
+    const box = $(t.id);
+    if (!box) continue;
+    box.addEventListener('change', () => handlers.onLayer(t.layers, box.checked));
+    handlers.onLayer(t.layers, box.checked);   // honour the markup's initial state
+  }
 }

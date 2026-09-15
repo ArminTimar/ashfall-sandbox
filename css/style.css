@@ -128,12 +128,19 @@ header h1 { margin: 10px 0 12px; }
 
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .pin {
+  /* The element is anchored by its bottom centre and the dot is pinned there,
+     so the marker lands on the projected point whatever the name is. Centring
+     the whole box instead — dot on the left, text running right — offsets the
+     dot by half the label width, which is up to 50 px, or about 3 km of map at
+     plan-view scale. That is what used to push Tarumizu out into the bay. */
   position: absolute;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -100%);
+  padding-bottom: 8px;
   font-size: 10.5px;
   font-weight: 600;
   color: #dce5ec;
   white-space: nowrap;
+  text-align: center;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
   opacity: 0;
   transition: opacity 0.2s;
@@ -141,12 +148,12 @@ header h1 { margin: 10px 0 12px; }
 .pin.on { opacity: 1; }
 .pin::before {
   content: "";
-  display: inline-block;
+  position: absolute;
+  left: 50%; bottom: 0;
+  transform: translate(-50%, 50%);
   width: 4px; height: 4px;
   background: #dce5ec;
   border-radius: 50%;
-  margin-right: 5px;
-  vertical-align: 1.5px;
   box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.5);
 }
 .pin.vent { color: #ffd27f; }
@@ -311,3 +318,16 @@ footer {
 footer p { color: var(--muted); max-width: none; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Map-layer switches, with a swatch matching the colours in js/vectors.js. */
+.toggles.map { margin-top: 6px; }
+.toggles.map .sw {
+  display: inline-block;
+  width: 10px; height: 0;
+  margin-right: 5px;
+  vertical-align: 3px;
+  border-top: 2px solid currentColor;
+}
+.toggles.map .sw.road { color: #d9cfbe; }
+.toggles.map .sw.rail { color: #7fc7e8; border-top-style: dashed; }
+.toggles.map .sw.city { color: #f0b45c; }

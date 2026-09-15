@@ -6,8 +6,9 @@
   "license": "MIT",
   "scripts": {
     "start": "node tools/serve.mjs 8000",
-    "test": "node test/orientation.mjs && node test/montecarlo.mjs",
+    "test": "node test/orientation.mjs && node test/montecarlo.mjs && node test/geography.mjs",
     "terrain": "python3 tools/build_terrain.py",
+    "vectors": "python3 tools/build_vectors.py",
     "bundle": "node tools/bundle.mjs"
   },
   "keywords": [

@@ -41,3 +41,25 @@ export function elevAt(xkm, ykm) {
   if (gx < 0 || gy < 0 || gx >= N || gy >= N) return 0;
   return elev[(N - 1 - gy) * N + gx];                    // elev is north-up
 }
+
+/**
+ * Bilinearly interpolated ground elevation, in metres.
+ *
+ * elevAt snaps to the nearest cell, which is fine for sampling the deposit but
+ * not for anything that has to sit *on* the rendered surface: the terrain mesh
+ * interpolates between vertices, so a nearest-cell height leaves labels and
+ * draped lines floating over valleys and buried in ridges by up to a cell of
+ * relief. Anything positioned against the visible ground should use this.
+ */
+export function elevAtSmooth(xkm, ykm) {
+  const fx = ((xkm - XW) / KMW) * (N - 1);
+  const fy = ((ykm - YS) / KMH) * (N - 1);               // fy 0 = south
+  const x0 = Math.floor(fx), y0 = Math.floor(fy);
+  const tx = fx - x0, ty = fy - y0;
+  const cx = (i) => Math.max(0, Math.min(N - 1, i));
+  const cy = (j) => Math.max(0, Math.min(N - 1, j));
+  const at = (i, j) => elev[(N - 1 - cy(j)) * N + cx(i)];
+  const s = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx;
+  const n = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx;
+  return s + (n - s) * ty;
+}

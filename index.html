@@ -20,7 +20,7 @@
   <h1>Sakurajima Ashfall Sandbox</h1>
   <p class="sub">Set an eruption and a wind field, watch the plume bend and the deposit drape over real terrain.
   Analytical advection&ndash;diffusion with Reynolds-dependent settling, after Suzuki (1983) and Tephra2.
-  <a href="https://github.com/">Physics, validation and limitations are in the README</a>.</p>
+  <a href="https://github.com/ArminTimar/ashfall-sandbox#readme">Physics, validation and limitations are in the README</a>.</p>
 </header>
 
 <div class="rig">
@@ -173,6 +173,11 @@
         <label><input type="checkbox" id="t-cont" checked> Isopachs</label>
         <label><input type="checkbox" id="t-spin"> Rotate</label>
       </div>
+      <div class="toggles map">
+        <label><input type="checkbox" id="t-road" checked> <i class="sw road"></i>Roads</label>
+        <label><input type="checkbox" id="t-rail" checked> <i class="sw rail"></i>Rail</label>
+        <label><input type="checkbox" id="t-city" checked> <i class="sw city"></i>City limit</label>
+      </div>
     </div>
   </div>
 </div>
@@ -182,6 +187,9 @@
   Model after Suzuki (1983) and the Tephra2 formulation of Connor and colleagues; settling velocity after
   Bonadonna and colleagues (1998); plume height to eruption rate after Mastin and colleagues (2009);
   damage thresholds after Blong and colleagues (2017).</p>
+  <p>Roads, railways and the Kagoshima city limit are
+  <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>,
+  licensed <a href="https://opendatacommons.org/licenses/odbl/">ODbL 1.0</a>.</p>
 </footer>
 
 </div>

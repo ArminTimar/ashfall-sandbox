@@ -5,7 +5,8 @@ import { field, stats, compute } from './physics.js';
 import { loadTerrain } from './terrain.js';
 import { initTexture, paintTexture, fieldTex } from './texture.js';
 import { seedParticles, parts, partXY } from './particles.js';
-import { initScene, renderFrame, resize, setView, applyExaggeration, markTextureDirty, setPlumeVisible } from './scene.js';
+import { initScene, renderFrame, resize, setView, applyExaggeration, markTextureDirty, setPlumeVisible, addVectors, setVectorLayer } from './scene.js';
+import { loadVectors } from './vectors.js';
 import { bindUI, syncInputs, syncLabels, updateReadout } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -39,9 +40,19 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-loadTerrain('data/terrain.png').then(() => {
+// The map layers are optional decoration for a physics model, so they are
+// fetched alongside the terrain but never allowed to block it: if Overpass
+// output is missing or malformed the sandbox still runs, minus the roads.
+Promise.all([
+  loadTerrain('data/terrain.png'),
+  loadVectors('data/vectors.json').catch((err) => {
+    console.warn('map layers unavailable:', err.message);
+    return null;
+  })
+]).then(([, vectors]) => {
   initTexture();
   initScene($('scene'));
+  if (vectors) addVectors(vectors);
   syncInputs();
   recompute({ reseed: false });
   seedParticles();
@@ -59,7 +70,8 @@ loadTerrain('data/terrain.png').then(() => {
       if (on) seedParticles();
       paintTexture(showContours());
       markTextureDirty();
-    }
+    },
+    onLayer: (layers, on) => { for (const id of layers) setVectorLayer(id, on); }
   });
 
   requestAnimationFrame(frame);

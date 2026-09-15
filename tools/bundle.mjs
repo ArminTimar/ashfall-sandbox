@@ -25,7 +25,7 @@ const THREE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.mi
 // Dependency order. params.js has no imports; main.js is the entry point.
 const ORDER = [
   'params.js', 'physics.js', 'grid.js', 'terrain.js',
-  'texture.js', 'particles.js', 'scene.js', 'ui.js', 'main.js'
+  'texture.js', 'particles.js', 'vectors.js', 'scene.js', 'ui.js', 'main.js'
 ];
 
 /**
@@ -88,6 +88,7 @@ async function getThree() {
 const html = await readFile(join(ROOT, 'index.html'), 'utf8');
 const css = await readFile(join(ROOT, 'css', 'style.css'), 'utf8');
 const terrain = await readFile(join(ROOT, 'data', 'terrain.png'));
+const vectors = await readFile(join(ROOT, 'data', 'vectors.json'), 'utf8');
 const three = await getThree();
 
 const wrapped = new Map();
@@ -116,12 +117,19 @@ if (missing.length) {
 
 const modules = ORDER.map((n) => wrapped.get(n).code);
 
+// The DEM becomes a data URI because an <img> can load one from file://. The
+// vector file is inlined as a literal instead: it is only ever handed to
+// loadVectors, which accepts an already-parsed object, so this skips both a
+// fetch() that a file:// origin would refuse and a base64 round-trip.
 const terrainUrl = 'data:image/png;base64,' + terrain.toString('base64');
 const bundle = [
   'const __M = {};',
   `const __TERRAIN_URL = ${JSON.stringify(terrainUrl)};`,
+  `const __VECTORS = ${vectors};`,
   ...modules
-].join('\n\n').replace(/loadTerrain\((['"])data\/terrain\.png\1\)/g, 'loadTerrain(__TERRAIN_URL)');
+].join('\n\n')
+  .replace(/loadTerrain\((['"])data\/terrain\.png\1\)/g, 'loadTerrain(__TERRAIN_URL)')
+  .replace(/loadVectors\((['"])data\/vectors\.json\1\)/g, 'loadVectors(__VECTORS)');
 
 let out = html
   .replace(/<link rel="stylesheet" href="css\/style\.css">/,
@@ -143,5 +151,6 @@ await mkdir(OUT_DIR, { recursive: true });
 await writeFile(join(OUT_DIR, 'index.html'), out);
 console.log(`wrote dist/index.html  ${(out.length / 1024 / 1024).toFixed(2)} MB`
   + `  (terrain ${(terrain.length / 1024).toFixed(0)} KB`
+  + `, vectors ${(vectors.length / 1024).toFixed(0)} KB`
   + `${three ? `, three.js ${(three.length / 1024).toFixed(0)} KB` : ', three.js from CDN'})`);
 console.log('opens straight from disk — no server needed');

@@ -26,13 +26,35 @@ export const CELLY = (KMH * 1000) / N;
 
 export const VENT_Z = 1060;       // m a.s.l., Minamidake summit
 
+// The geographic anchor of the whole model. Everything downstream is in
+// kilometres east and north of this point, so these four numbers have to agree
+// with tools/build_terrain.py and tools/build_vectors.py or the terrain, the
+// vectors and the physics end up in three slightly different places.
+export const VENT_LON = 130.6575;
+export const VENT_LAT = 31.5931;
+export const KM_PER_DEG_LAT = 110.574;
+export const KM_PER_DEG_LON = 111.320 * Math.cos((VENT_LAT * Math.PI) / 180);
+
+/** Longitude in degrees to kilometres east of the vent. */
+export function lonToX(lon) { return (lon - VENT_LON) * KM_PER_DEG_LON; }
+
+/** Latitude in degrees to kilometres north of the vent. */
+export function latToY(lat) { return (lat - VENT_LAT) * KM_PER_DEG_LAT; }
+
+// Labelled places, held as longitude/latitude so each one can be checked
+// against a map; the kilometre offsets are derived and never typed by hand.
+// They used to be typed by hand, which is how Tarumizu ended up 1.5 km south
+// of the town, out towards the middle of Kagoshima Bay.
+//
+// Settlement and airport positions are OpenStreetMap; the vent is the
+// Minamidake summit that defines the origin.
 export const PLACES = [
-  { n: 'Minamidake',        x:  0.0, y:   0.0, vent: true },
-  { n: 'Kagoshima',         x: -9.5, y:   0.4, key: 'kago' },
-  { n: 'Kagoshima Airport', x:  5.9, y:  23.0, key: 'air' },
-  { n: 'Tarumizu',          x:  4.0, y: -12.6 },
-  { n: 'Kirishima',         x:  9.7, y:  16.3 }
-];
+  { n: 'Minamidake',        lon: 130.65750, lat: 31.59310, vent: true },
+  { n: 'Kagoshima',         lon: 130.55719, lat: 31.59679, key: 'kago' },
+  { n: 'Kagoshima Airport', lon: 130.71944, lat: 31.80325, key: 'air' },
+  { n: 'Tarumizu',          lon: 130.70123, lat: 31.49269 },
+  { n: 'Kirishima',         lon: 130.76324, lat: 31.74101 }
+].map((p) => Object.assign(p, { x: lonToX(p.lon), y: latToY(p.lat) }));
 
 /**
  * Live model parameters. Mutated in place by the UI so every module sees the
