@@ -13,6 +13,9 @@ the same equations. It is not a decorative particle effect.
 
 ## Quick start
 
+**Try it without installing anything** — the current `main` runs live at
+[armintimar.github.io/ashfall-sandbox](https://armintimar.github.io/ashfall-sandbox/).
+
 **Double-clicking `index.html` will not work.** Browsers refuse to load ES
 modules over `file://`, and refuse to read the terrain PNG into a canvas from
 there. The page detects this and says so, but there is nothing it can do about
