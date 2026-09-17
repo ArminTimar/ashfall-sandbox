@@ -8,7 +8,7 @@
 // height, grain size) mixture: each component contributes its own diffusive
 // variance plus the spread of the component means about the overall mean.
 
-import { NH, NPHI, VENT_Z, P } from '../js/params.js';
+import { NH, NPHI } from '../js/params.js';
 import {
   airRho, vSettle, windAt, fallPath, plumeTau, axisVar, gauss,
   grainBins, heightBins
@@ -29,18 +29,19 @@ function mulberry32(a) {
 }
 Math.random = mulberry32(1);   // also drives gauss() in physics.js
 
-Object.assign(P, { H: 6, logM: 8.7, phi: 1.8, sig: 1.6, suz: 4,
-                   dir: 280, spd: 16, top: 34, shear: 15, K: 3000 });
+const VENT_Z = 1060;
+const P = { H: 6, logM: 8.7, phi: 1.8, sig: 1.6, suz: 4,
+            dir: 280, spd: 16, top: 34, shear: 15, K: 3000 };
 
 function analytic() {
-  const g = grainBins(), h = heightBins();
+  const g = grainBins(P), h = heightBins(P, VENT_Z);
   let mx = 0, my = 0, W = 0;
   const comp = [];
   for (let i = 0; i < NH; i++) {
     for (let j = 0; j < NPHI; j++) {
       const w = h.w[i] * g.w[j];
-      const fp = fallPath(h.z[i], g.d[j], g.rho[j]);
-      const s2 = axisVar(fp.t, plumeTau(h.z[i] - VENT_Z));
+      const fp = fallPath(P, h.z[i], g.d[j], g.rho[j]);
+      const s2 = axisVar(P, fp.t, plumeTau(P, h.z[i] - VENT_Z));
       comp.push({ w, dx: fp.dx, dy: fp.dy, s2 });
       W += w; mx += w * fp.dx; my += w * fp.dy;
     }
@@ -56,7 +57,7 @@ function analytic() {
 }
 
 function monteCarlo(n, dtModel) {
-  const g = grainBins(), h = heightBins();
+  const g = grainBins(P), h = heightBins(P, VENT_Z);
   const cum = (a) => { let s = 0; return a.map((w) => (s += w)); };
   const cumH = cum(h.w), cumG = cum(g.w);
   const pick = (c) => { const r = Math.random();
@@ -67,7 +68,7 @@ function monteCarlo(n, dtModel) {
   for (let k = 0; k < n; k++) {
     const i = pick(cumH), j = pick(cumG);
     let z = h.z[i], dx = 0, dy = 0;
-    const s0 = Math.sqrt(axisVar(0, plumeTau(z - VENT_Z)));
+    const s0 = Math.sqrt(axisVar(P, 0, plumeTau(P, z - VENT_Z)));
     dx += gauss() * s0; dy += gauss() * s0;
     while (z > 0) {
       let vs = vSettle(g.d[j], g.rho[j], airRho(Math.max(z, 0)));
@@ -78,7 +79,7 @@ function monteCarlo(n, dtModel) {
       // gradient: with the wind strengthening upward, a 20 s step of a fast
       // grain over-drifts, and the x-spread came out 2-4% high at dt = 20 s
       // while dt = 5 s agreed.
-      const w = windAt(Math.max(z - (vs * dt) / 2, 0));
+      const w = windAt(P, Math.max(z - (vs * dt) / 2, 0));
       // Land exactly. z - vs * (z / vs) can round to a positive denormal
       // instead of zero, and the particle then "lands" for millions of steps
       // of subnormal arithmetic — a 24 mm clast from mid-column did exactly

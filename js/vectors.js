@@ -1,47 +1,45 @@
-// Cultural features draped over the terrain: the Kagoshima city limit, the
-// trunk road network and the railways.
+// Roads, railways and prefecture borders draped over the terrain.
 //
 // data/vectors.json is built by tools/build_vectors.py from OpenStreetMap
-// (© OpenStreetMap contributors, ODbL 1.0) and already carries kilometres in
-// the model's vent-relative frame, so the only work left here is making the
-// lines follow the ground.
+// (© OpenStreetMap contributors, ODbL 1.0) and holds kilometres of EPSG:6670,
+// the same system as the terrain grid.
 //
-// They are drawn as three.js line segments rather than painted into the
-// deposit texture. The texture is 512 px across a 100 km domain, 195 m per
-// pixel, so a road painted there would be a blurry band 195 m wide. It would
-// also have to be composited under the ash on every parameter change.
-// Real geometry stays sharp at any zoom and costs nothing per frame.
+// The lines are three.js line segments, not paint in the deposit texture. The
+// texture is one pixel per 200 m, so a painted road would be a blurry band.
+//
+// Far from the camera the terrain is drawn with fewer vertices than the lines
+// follow, so lines would dip under ridges. Each layer is lifted in the vertex
+// shader by an amount that grows with camera distance, which keeps them on top
+// without rebuilding any geometry.
 
 import { P } from './params.js';
 import { elevAtSmooth } from './terrain.js';
 
-// Resample interval along a line, in km. Lines are simplified in the build
-// script to within 50 m of the true geometry, which leaves long straight runs
-// that would otherwise cut through hills between their endpoints.
-const STEP = 0.3;
+// Resample interval along a line, in km, so long straight runs follow the hills.
+const STEP = 0.4;
 
-// Drawing order matters: later layers win the depth test at equal height, so
-// the city limit sits above the roads it crosses.
+// Drawing order matters: later layers win at equal height, so borders sit above
+// the roads they cross. maxDist hides a layer when the camera is farther away
+// than that many km.
 export const LAYERS = [
-  { id: 'minor',    src: ['minor'],           color: 0x9aa7ae, opacity: 0.40, lift: 0.010 },
-  { id: 'major',    src: ['major'],           color: 0xd9cfbe, opacity: 0.62, lift: 0.013 },
-  { id: 'rail',     src: ['rail'],            color: 0x7fc7e8, opacity: 0.70, lift: 0.016 },
-  { id: 'boundary', src: ['boundary'],        color: 0xf0b45c, opacity: 0.85, lift: 0.019 }
+  { id: 'minor',    color: { dark: 0x9aa7ae, light: 0x6f6a60 }, opacity: 0.40, lift: 0.010, maxDist: 90 },
+  { id: 'major',    color: { dark: 0xd9cfbe, light: 0x8a5a3c }, opacity: 0.62, lift: 0.013, maxDist: Infinity },
+  { id: 'rail',     color: { dark: 0x7fc7e8, light: 0x2c4f8f }, opacity: 0.70, lift: 0.016, maxDist: Infinity },
+  { id: 'boundary', color: { dark: 0xf0b45c, light: 0x8e3b8e }, opacity: 0.75, lift: 0.019, maxDist: Infinity }
 ];
 
-// What the checkboxes control. Roads are one switch over two drawn layers so
-// the primary and secondary networks can still be styled apart.
+// What the checkboxes control. Roads are one switch over two drawn layers.
 export const TOGGLES = [
   { id: 't-road', layers: ['major', 'minor'], label: 'Roads' },
   { id: 't-rail', layers: ['rail'],           label: 'Rail' },
-  { id: 't-city', layers: ['boundary'],       label: 'City limit' }
+  { id: 't-pref', layers: ['boundary'],       label: 'Prefecture borders' }
 ];
 
-const built = new Map();   // layer id -> { obj, xs, zs, pos, lift }
+const built = new Map();   // layer id -> { obj, xs, zs, pos, spec, uniforms, on }
 
 /**
  * Fetch the vector file. Accepts an already-parsed object so the standalone
- * bundle can inline it — fetch() cannot read a file:// URL.
+ * bundle can inline it, since fetch() cannot read a file:// URL.
  */
 export function loadVectors(src = 'data/vectors.json') {
   if (typeof src !== 'string') return Promise.resolve(src);
@@ -51,13 +49,9 @@ export function loadVectors(src = 'data/vectors.json') {
   });
 }
 
-/**
- * Walk a list of polylines and emit line-segment endpoint pairs, resampled so
- * no piece is longer than STEP. Returns the x and y (northing) components; the
- * heights are filled in separately because they change with exaggeration.
- */
+/** Line-segment endpoint pairs, resampled so no piece is longer than STEP. */
 function resample(lines) {
-  const xs = [], zs = [];
+  const xs = [], ys = [];
   for (const ln of lines) {
     for (let i = 1; i < ln.length; i++) {
       const x0 = ln[i - 1][0], y0 = ln[i - 1][1];
@@ -69,63 +63,79 @@ function resample(lines) {
         const qx = x0 + (x1 - x0) * t;
         const qy = y0 + (y1 - y0) * t;
         xs.push(px, qx);
-        zs.push(py, qy);
+        ys.push(py, qy);
         px = qx; py = qy;
       }
     }
   }
-  return { xs, zs };
+  return { xs, ys };
+}
+
+function liftedMaterial(color, opacity) {
+  const uniforms = { uLift: { value: 0 } };
+  const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uLift = uniforms.uLift;
+    shader.vertexShader = 'uniform float uLift;\n' + shader.vertexShader
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed.y += uLift;');
+  };
+  return { mat, uniforms };
 }
 
 /** Build the line meshes and add them to the scene. Returns vertex count. */
 export function buildVectors(doc, scene) {
   let total = 0;
   for (const L of LAYERS) {
-    const lines = L.src.flatMap((k) => doc.layers[k] || []);
+    const lines = doc.layers[L.id] || [];
     if (!lines.length) continue;
-    const { xs, zs } = resample(lines);
+    const { xs, ys } = resample(lines);
     const n = xs.length;
     const pos = new Float32Array(n * 3);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const obj = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
-      color: L.color, transparent: true, opacity: L.opacity, depthWrite: false
-    }));
+    const { mat, uniforms } = liftedMaterial(L.color[P.theme], L.opacity);
+    const obj = new THREE.LineSegments(geo, mat);
     obj.renderOrder = 1;
+    obj.frustumCulled = false;
     scene.add(obj);
-    built.set(L.id, { obj, xs: Float32Array.from(xs), zs: Float32Array.from(zs), pos, lift: L.lift });
+    built.set(L.id, { obj, xs: Float32Array.from(xs), ys: Float32Array.from(ys), pos, spec: L, uniforms, on: true });
     total += n;
   }
   updateVectorHeights();
   return total;
 }
 
-/**
- * Re-drape every line on the terrain. Cheap enough to call outright whenever
- * the vertical exaggeration changes.
- *
- * The lift is scaled by the exaggeration because the relief it has to clear
- * grows with it: a fixed offset that clears a ridge at ×1 disappears into the
- * hillside at ×12.
- */
+/** Re-drape every line on the terrain, after the vertical exaggeration changes. */
 export function updateVectorHeights() {
   for (const B of built.values()) {
-    const { xs, zs, pos } = B;
-    const lift = B.lift * P.ex;
+    const { xs, ys, pos } = B;
     for (let i = 0; i < xs.length; i++) {
       pos[i * 3] = xs[i];
-      pos[i * 3 + 1] = (elevAtSmooth(xs[i], zs[i]) / 1000) * P.ex + lift;
-      pos[i * 3 + 2] = -zs[i];
+      pos[i * 3 + 1] = (elevAtSmooth(xs[i] * 1000, ys[i] * 1000) / 1000) * P.ex;
+      pos[i * 3 + 2] = -ys[i];
     }
     B.obj.geometry.attributes.position.needsUpdate = true;
     B.obj.geometry.computeBoundingSphere();
   }
 }
 
+/** Per-frame: lift with camera distance, hide detail layers when far away. */
+export function updateVectorView(camDist) {
+  for (const B of built.values()) {
+    B.uniforms.uLift.value = (B.spec.lift + camDist * 0.0012) * Math.max(1, P.ex / 3);
+    B.obj.visible = B.on && camDist <= B.spec.maxDist;
+  }
+}
+
 /** Show or hide one drawn layer by id. */
 export function setLayerVisible(id, on) {
   const B = built.get(id);
-  if (B) B.obj.visible = !!on;
+  if (B) { B.on = !!on; B.obj.visible = B.on; }
+}
+
+/** Recolour the layers for a theme. */
+export function setVectorTheme(theme) {
+  for (const B of built.values()) B.obj.material.color.setHex(B.spec.color[theme]);
 }
 
 export function hasVectors() { return built.size > 0; }

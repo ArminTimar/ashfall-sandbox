@@ -1,12 +1,12 @@
 {
   "name": "ashfall-sandbox",
-  "version": "0.4.0",
-  "description": "Interactive tephra advection-diffusion model for Sakurajima volcano on real GSI terrain",
+  "version": "0.5.0",
+  "description": "Interactive tephra advection-diffusion model for the volcanoes of Kyushu on real GSI terrain",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "start": "node tools/serve.mjs 8000",
-    "test": "node test/orientation.mjs && node test/montecarlo.mjs && node test/geography.mjs && node test/markup.mjs && node test/particles.mjs && node test/inputs.mjs",
+    "test": "node test/proj.mjs && node test/orientation.mjs && node test/montecarlo.mjs && node test/geography.mjs && node test/markup.mjs && node test/particles.mjs && node test/inputs.mjs",
     "terrain": "python3 tools/build_terrain.py",
     "vectors": "python3 tools/build_vectors.py",
     "bundle": "node tools/bundle.mjs"

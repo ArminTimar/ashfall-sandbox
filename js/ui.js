@@ -2,20 +2,32 @@
 //
 // Every numeric control is a pair: a slider for exploring, and a text box for
 // entering an exact value. Both write the same parameter through one spec per
-// field (FIELDS below), so their ranges, units and formatting cannot disagree.
-// The text box accepts more than the slider covers — a slider has to stop
-// somewhere sensible to drag across, a typed value only has to be physically
-// meaningful — and the slider simply pins at its end.
+// field (FIELDS below), so their ranges, units and formatting can't disagree.
+// A typed value can go past the end of the slider, which then stays at its end.
+//
+// Eruption and wind controls edit the volcano chosen in the volcano selector.
+// Each volcano keeps its own values, so switching back and forth keeps them.
 
-import { P, PLACES, VENT_Z, applyPreset } from './params.js';
+import { P, LANDMARKS } from './params.js';
 import { TOGGLES } from './vectors.js';
-import { clock } from './particles.js';
-import { stats, sampleAt, mastinMER } from './physics.js';
+import { mastinMER, sampleField } from './physics.js';
+import { VOLCANOES, volcanoById, applyPreset, SOURCES } from './volcanoes.js';
 import { UNITS, parseWith, parseDirection, parsePhi, parseSuzuki } from './parse.js';
 import { veiOfMass } from './vei.js';
 import { bindHelp } from './help.js';
 
 const $ = (id) => document.getElementById(id);
+
+// The volcano the eruption controls currently edit.
+let selected = VOLCANOES[0];
+export function selectedVolcano() { return selected; }
+
+// Place positions by name, for the readouts. Filled from data/vectors.json.
+const placeIndex = new Map();
+export function setPlaces(places) {
+  for (const a of LANDMARKS) placeIndex.set(a.n, { E: a.E, N: a.N });
+  for (const q of places || []) if (!placeIndex.has(q.n)) placeIndex.set(q.n, { E: q.x * 1000, N: q.y * 1000 });
+}
 
 export function fmtMM(mm) {
   if (mm < 0.0005) return '0';
@@ -125,9 +137,9 @@ function volFmt(m3) {
 export const FIELDS = [
   { id: 'h', key: 'H', kind: 'model', min: 0.1, max: 40, step: 0.1,
     parse: (s) => parseWith(s, UNITS.km), fmt: (v) => v.toFixed(1),
-    hint: (v) => `top at ${(v + VENT_Z / 1000).toFixed(1)} km above sea level` },
+    hint: (v) => `top at ${(v + selected.ventZ / 1000).toFixed(1)} km above sea level` },
   { id: 'm', kind: 'model', min: 1e3, max: 1e15, log: true,
-    get: () => Math.pow(10, P.logM), set: (v) => { P.logM = Math.log10(v); },
+    get: () => Math.pow(10, selected.p.logM), set: (v) => { selected.p.logM = Math.log10(v); },
     toSlider: (v) => ((Math.log10(v) - 4) / 9) * 100,
     fromSlider: (x) => Math.pow(10, 4 + (x / 100) * 9),
     parse: (s) => parseWith(s, UNITS.kg), fmt: expFmt, edit: eFmt },
@@ -149,13 +161,13 @@ export const FIELDS = [
     parse: (s) => parseWith(s, UNITS.degrees), fmt: (v) => (v > 0 ? '+' : '') + trim(v, 1),
     hint: (v) => (Math.abs(v) < 0.5 ? 'same direction at every height'
       : v > 0 ? 'veers clockwise with height' : 'backs anticlockwise with height') },
-  { id: 'rate', key: 'rate', kind: 'display', min: 1, max: 3600, step: 5,
+  { id: 'rate', key: 'rate', kind: 'display', global: true, min: 1, max: 3600, step: 5,
     parse: (s) => parseWith(s, UNITS.times), fmt: (v) => trim(v, 1),
     hint: (v) => `1 s on screen is ${fmtDur(v)} of eruption` },
   { id: 'elen', kind: 'display', min: 1, max: 2880, step: 5,
-    get: () => P.dur / 60, set: (v) => { P.dur = v * 60; },
+    get: () => selected.p.dur / 60, set: (v) => { selected.p.dur = v * 60; },
     parse: (s) => parseWith(s, UNITS.minutes), fmt: (v) => trim(v, 1) },
-  { id: 'ex', key: 'ex', kind: 'exaggeration', min: 1, max: 20, step: 0.5,
+  { id: 'ex', key: 'ex', kind: 'exaggeration', global: true, min: 1, max: 20, step: 0.5,
     parse: (s) => parseWith(s, UNITS.times), fmt: (v) => v.toFixed(1) },
   { id: 'k', key: 'K', kind: 'model', min: 10, max: 100000, step: 100,
     parse: (s) => parseWith(s, UNITS.diffus), fmt: grouped },
@@ -164,8 +176,9 @@ export const FIELDS = [
 ];
 
 for (const F of FIELDS) {
-  F.get = F.get || (() => P[F.key]);
-  F.set = F.set || ((v) => { P[F.key] = v; });
+  const obj = () => (F.global ? P : selected.p);
+  F.get = F.get || (() => obj()[F.key]);
+  F.set = F.set || ((v) => { obj()[F.key] = v; });
   F.toSlider = F.toSlider || ((v) => v);
   F.fromSlider = F.fromSlider || ((x) => x);
   F.edit = F.edit || F.fmt;
@@ -212,7 +225,8 @@ export function syncMode() {
 export function updateClock() {
   const el = $('v-clock');
   if (!el) return;
-  if (P.mode !== 'eruption') { el.textContent = ''; return; }
+  const clock = selected.cloud && selected.cloud.clock;
+  if (P.mode !== 'eruption' || !clock || !selected.erupting) { el.textContent = ''; return; }
   const pct = Math.min(100, Math.round((clock.released / Math.max(clock.budget, 1)) * 100));
   el.textContent = clock.done
     ? 'settled at ' + fmtDur(clock.t)
@@ -223,13 +237,14 @@ export function updateClock() {
 export function syncLabels() {
   for (const F of FIELDS) renderField(F);
 
-  const kg = Math.pow(10, P.logM);
-  const dur = kg / mastinMER(P.H);
+  const p = selected.p;
+  const kg = Math.pow(10, p.logM);
+  const dur = kg / mastinMER(p.H);
   $('v-dur').textContent = fmtDur(dur);
   $('d-dur').setAttribute('data-s', durState(dur));
 
-  const c = veiOfMass(kg, P.rho);
-  $('v-vei').textContent = `${c.vei} · ${volFmt(kg / P.rho)} bulk`;
+  const c = veiOfMass(kg, p.rho);
+  $('v-vei').textContent = `${c.vei} · ${volFmt(kg / p.rho)} bulk`;
   $('v-vei-ex').textContent = 'Comparable: ' + c.example;
 }
 
@@ -239,25 +254,51 @@ export function syncInputs() {
   syncLabels();
 }
 
-export function updateReadout() {
-  const f = stats.mmFac;
-  for (const key of ['kago', 'air']) {
-    const pl = PLACES.find((p) => p.key === key);
-    const L = sampleAt(pl.x, pl.y);
-    const mm = L * f;
-    $('r-' + key).textContent = fmtMM(mm);
-    $('r-' + key + '-l').textContent = fmtLoad(L);
-    setBadge('r-' + key + '-d', mm);
+/** Combined deposit of every erupting volcano at a point: [kg/m2, mm]. */
+function combinedAt(E, N) {
+  let load = 0, mm = 0;
+  for (const v of VOLCANOES) {
+    if (!v.erupting || !v.field) continue;
+    const L = sampleField(v.field, E, N);
+    load += L;
+    mm += L * v.field.stats.mmFac;
   }
-  const mxmm = stats.max * f;
-  $('r-max').textContent = fmtMM(mxmm);
-  $('r-max-l').textContent = fmtLoad(stats.max);
-  setBadge('r-max-d', mxmm);
+  return [load, mm];
+}
 
-  $('r-a1').textContent = stats.a1 < 0.05 ? '0'
-    : stats.a1 < 10 ? stats.a1.toFixed(1)
-    : Math.round(stats.a1).toLocaleString('en-US');
-  $('r-bal').textContent = Math.round((stats.total / stats.M) * 100) + '% of mass landed in view';
+/**
+ * Readouts for the selected volcano's two reference places, the combined peak
+ * and the combined area over 1 mm.
+ * @param {number} maxMM combined maximum thickness from texture.paintTexture
+ */
+export function updateReadout(maxMM = 0) {
+  selected.refs.forEach((name, k) => {
+    const key = 'r-' + 'ab'[k];
+    $(key + '-k').textContent = name;
+    const at = placeIndex.get(name);
+    if (!at) { $(key).textContent = '–'; $(key + '-l').textContent = '–'; setBadge(key + '-d', 0); return; }
+    const [L, mm] = combinedAt(at.E, at.N);
+    $(key).textContent = fmtMM(mm);
+    $(key + '-l').textContent = fmtLoad(L);
+    setBadge(key + '-d', mm);
+  });
+
+  let maxLoad = 0, a1 = 0, total = 0, M = 0;
+  for (const v of VOLCANOES) {
+    if (!v.erupting || !v.field) continue;
+    maxLoad = Math.max(maxLoad, v.field.stats.max);
+    a1 += v.field.stats.a1;
+    if (v === selected) { total = v.field.stats.total; M = v.field.stats.M; }
+  }
+  $('r-max').textContent = fmtMM(maxMM);
+  $('r-max-l').textContent = fmtLoad(maxLoad);
+  setBadge('r-max-d', maxMM);
+  $('r-a1').textContent = a1 < 0.05 ? '0'
+    : a1 < 10 ? a1.toFixed(1)
+    : Math.round(a1).toLocaleString('en-US');
+  $('r-bal').textContent = selected.erupting && M
+    ? `${Math.round((total / M) * 100)}% of ${selected.name} mass landed on the map`
+    : `${selected.name} is not erupting`;
 }
 
 /** Show a message in a field's hint line for a few seconds. */
@@ -371,11 +412,39 @@ export function bindUI(handlers) {
       handlers.onReplay();
     });
   }
-  for (const b of document.querySelectorAll('button.p[data-preset]')) {
-    b.addEventListener('click', () => {
-      if (applyPreset(b.dataset.preset)) { syncInputs(); handlers.onPreset(); }
-    });
+  // Volcano selector, erupting switch and camera.
+  const sel = $('volcano');
+  sel.innerHTML = VOLCANOES.map((v) => `<option value="${v.id}">${v.name}</option>`).join('');
+  sel.addEventListener('change', () => {
+    selected = volcanoById(sel.value) || VOLCANOES[0];
+    syncVolcano();
+    handlers.onSelect(selected);
+  });
+  $('v-erupt').addEventListener('change', () => {
+    selected.erupting = $('v-erupt').checked;
+    syncVolcano();
+    handlers.onErupt(selected);
+  });
+  $('v-fly').addEventListener('click', () => handlers.onFly(selected.id));
+
+  const focus = $('cam-focus');
+  focus.innerHTML = '<option value="">Free camera</option>'
+    + VOLCANOES.map((v) => `<option value="${v.id}">${v.name}</option>`).join('');
+  focus.addEventListener('change', () => handlers.onFocus(focus.value || null));
+
+  $('presets').addEventListener('click', (e) => {
+    const b = e.target.closest('button.p[data-preset]');
+    if (b && applyPreset(selected, b.dataset.preset)) {
+      syncInputs();
+      syncVolcano();
+      handlers.onPreset(selected);
+    }
+  });
+
+  for (const b of document.querySelectorAll('button.p[data-theme-set]')) {
+    b.addEventListener('click', () => handlers.onTheme(b.dataset.themeSet));
   }
+  $('b-save').addEventListener('click', () => handlers.onSave());
   for (const b of document.querySelectorAll('.views button')) {
     b.addEventListener('click', () => handlers.onView(b.dataset.v));
   }
@@ -392,4 +461,44 @@ export function bindUI(handlers) {
   }
 
   bindHelp();
+  syncVolcano();
+}
+
+/** Show which volcano is selected, its erupting switch and its presets. */
+export function syncVolcano() {
+  const v = selected;
+  $('volcano').value = v.id;
+  $('v-erupt').checked = !!v.erupting;
+  $('v-vent').textContent = `${v.vent}, ${v.ventZ.toLocaleString('en-US')} m`;
+  const box = $('presets');
+  if (!v.presets.length) {
+    box.innerHTML = '';
+    $('preset-notes').innerHTML = '<p class="note">No published eruption preset for this '
+      + 'volcano yet. The values are round starting points.</p>';
+  } else {
+    box.innerHTML = v.presets.map((pr) => `<button class="p" type="button" data-preset="${pr.id}"`
+      + ` aria-pressed="${pr.id === v.preset}">${pr.name}</button>`).join('');
+    const pr = v.presets.find((x) => x.id === v.preset);
+    $('preset-notes').innerHTML = pr ? '<ul class="sources">' + pr.notes.map(([text, src]) => {
+      const S = src && SOURCES[src];
+      return `<li>${text}.${S ? ` <a href="${S.url}" target="_blank" rel="noopener">${S.cite}</a>` : ''}</li>`;
+    }).join('') + '</ul>' : '';
+  }
+  for (const b of document.querySelectorAll('.col-ctl .needs-erupt')) {
+    b.classList.toggle('off', !v.erupting);
+  }
+  syncInputs();
+}
+
+/** Reflect the camera focus in its selector. */
+export function syncFocus(id) {
+  const f = $('cam-focus');
+  if (f) f.value = id || '';
+}
+
+/** Highlight the active theme button. */
+export function syncTheme() {
+  for (const b of document.querySelectorAll('button.p[data-theme-set]')) {
+    b.setAttribute('aria-pressed', String(b.dataset.themeSet === P.theme));
+  }
 }

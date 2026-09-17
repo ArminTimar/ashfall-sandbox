@@ -1,0 +1,13 @@
+{
+  "epsg": 6670,
+  "crs": "JGD2011 / Japan Plane Rectangular CS II",
+  "west": -154000,
+  "south": -230000,
+  "east": 108000,
+  "north": 112000,
+  "cell": 200,
+  "nx": 1310,
+  "ny": 1710,
+  "encoding": "north-up; R,G elevation in decimetres big-endian; B land fraction 0-255",
+  "source": "GSI 標高タイル dem_png zoom 11"
+}

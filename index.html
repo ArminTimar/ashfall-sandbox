@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sakurajima Ashfall Sandbox</title>
-<meta name="description" content="Interactive ash fall model for Sakurajima volcano on real GSI terrain.">
+<title>Kyushu Ashfall Sandbox</title>
+<meta name="description" content="Interactive ash fall model for the volcanoes of Kyushu on real GSI terrain.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -22,11 +22,11 @@
     <div class="panel">
       <div id="scene">
         <div id="labels"></div>
-        <div class="badge">Sakurajima · Minamidake</div>
+        <div class="badge">Kyushu · EPSG:6670</div>
         <div class="views">
           <button data-v="oblique" type="button">Oblique</button>
-          <button data-v="top" type="button">Plan</button>
-          <button data-v="city" type="button">From city</button>
+          <button data-v="plan" type="button">Plan</button>
+          <button data-v="kyushu" type="button">Kyushu</button>
         </div>
         <div class="ramp">
           <div class="cap">Deposit thickness</div>
@@ -34,8 +34,8 @@
           <div class="lbl"><span>0.001 mm</span><span>1</span><span>1000+</span></div>
         </div>
         <div class="legend" aria-hidden="true">
-          <span>City over 50,000 <i class="t1"></i></span>
-          <span>City or town <i class="t2"></i></span>
+          <span>City over 100,000 <i class="t1"></i></span>
+          <span>City, town or village <i class="t2"></i></span>
           <span>District <i class="t3"></i></span>
           <span>Volcano <i class="vol"></i></span>
         </div>
@@ -69,16 +69,16 @@
 
     <div class="readout">
       <div class="cell">
-        <div class="k">Kagoshima city</div>
-        <div class="v" id="r-kago">–</div>
-        <div class="u">mm · <span id="r-kago-l">–</span></div>
-        <div class="dmg" id="r-kago-d"></div>
+        <div class="k" id="r-a-k">–</div>
+        <div class="v" id="r-a">–</div>
+        <div class="u">mm · <span id="r-a-l">–</span></div>
+        <div class="dmg" id="r-a-d"></div>
       </div>
       <div class="cell">
-        <div class="k">Kagoshima airport</div>
-        <div class="v" id="r-air">–</div>
-        <div class="u">mm · <span id="r-air-l">–</span></div>
-        <div class="dmg" id="r-air-d"></div>
+        <div class="k" id="r-b-k">–</div>
+        <div class="v" id="r-b">–</div>
+        <div class="u">mm · <span id="r-b-l">–</span></div>
+        <div class="dmg" id="r-b-d"></div>
       </div>
       <div class="cell">
         <div class="k">Peak deposit</div>
@@ -97,19 +97,26 @@
 
   <div class="col-ctl">
     <header class="masthead">
-      <h1>Sakurajima Ashfall Sandbox</h1>
+      <h1>Kyushu Ashfall Sandbox</h1>
       <p class="tag">Tephra fall on real terrain. <a href="#about">About</a> ·
       <a href="https://github.com/ArminTimar/ashfall-sandbox#readme">README</a></p>
     </header>
 
     <div class="ctl">
-      <h3>Scenario</h3>
-      <div class="presets">
-        <button class="p" data-preset="routine" type="button">Routine vulcanian</button>
-        <button class="p" data-preset="large" type="button">Large explosion</button>
-        <button class="p" data-preset="taisho" type="button">Taishō 1914 scale</button>
-        <button class="p" data-preset="summer" type="button">Wind onto city</button>
+      <h3>Volcano</h3>
+      <div class="vrow">
+        <select id="volcano" aria-label="Volcano to edit"></select>
+        <label class="chk"><input type="checkbox" id="v-erupt"> Erupting</label>
       </div>
+      <div class="vrow sub">
+        <span class="note vent" id="v-vent"></span>
+        <button class="p small" id="v-fly" type="button">Fly here</button>
+      </div>
+      <p class="note">Each volcano keeps its own eruption and wind. The controls below edit the one
+      selected here. Deposits from several erupting volcanoes add up on the map.</p>
+      <h4 class="sub-h">Presets from the literature</h4>
+      <div class="presets single" id="presets"></div>
+      <div id="preset-notes"></div>
       <p class="note typing">You can type any value. Click a number, enter a new one and press Enter.
       Units work too, for example <code>200 Mt</code>, <code>30000 ft</code>, <code>250 µm</code>, <code>40 kt</code> or <code>WSW</code>.</p>
     </div>
@@ -242,6 +249,16 @@
 
     <div class="ctl">
       <h3>View &amp; deposit</h3>
+      <div class="presets modes">
+        <button class="p" data-theme-set="dark" type="button">Dark</button>
+        <button class="p" data-theme-set="light" type="button">Light</button>
+      </div>
+      <div class="vrow">
+        <label class="lbl" for="cam-focus">Camera centre</label>
+        <select id="cam-focus" aria-label="Camera centre"></select>
+      </div>
+      <p class="note">Drag to orbit. Right-drag or Shift-drag to pan. Scroll or pinch to zoom.
+      Rotate and the view buttons turn around the camera centre.</p>
       <div class="field">
         <div class="top">
         <label for="n-ex">Vertical exaggeration</label>
@@ -277,8 +294,11 @@
       <div class="toggles map">
         <label><input type="checkbox" id="t-road" checked> <i class="sw road"></i>Roads</label>
         <label><input type="checkbox" id="t-rail" checked> <i class="sw rail"></i>Rail</label>
-        <label><input type="checkbox" id="t-city" checked> <i class="sw city"></i>City limit</label>
+        <label><input type="checkbox" id="t-pref" checked> <i class="sw city"></i>Prefecture borders</label>
         <label><input type="checkbox" id="t-places" checked> Place names</label>
+      </div>
+      <div class="vrow save">
+        <button class="p" id="b-save" type="button">Save view as PNG</button>
       </div>
     </div>
 
@@ -296,11 +316,12 @@
     </section>
 
     <footer>
-      <p>Elevation: GSI 標高タイル (Geospatial Information Authority of Japan), zoom 12, resampled.
+      <p>Coordinates: JGD2011 / Japan Plane Rectangular CS II (EPSG:6670), 200 m grid.
+      Elevation: GSI 標高タイル (Geospatial Information Authority of Japan), zoom 11, resampled.
       Deposit model after Suzuki (1983) and the Tephra2 model of Connor and colleagues. Settling
       velocity after Bonadonna and colleagues (1998). Plume height to eruption rate after Mastin and
       colleagues (2009). Damage thresholds after Blong and colleagues (2017).</p>
-      <p>Roads, railways, the Kagoshima city limit and most place names are
+      <p>Roads, railways, prefecture borders and most place names are
       <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>,
       licensed <a href="https://opendatacommons.org/licenses/odbl/">ODbL 1.0</a>. Some smaller place
       names are from <a href="https://www.geonames.org/">GeoNames</a>, licensed

@@ -25,7 +25,7 @@ export const HELP = {
   height: {
     title: 'Plume height above vent',
     html: `<p>Height of the top of the eruption column, measured from the vent. The
-      vent is the Minamidake summit at about 1,060 m above sea level.</p>
+      vent height of the selected volcano is shown under its name.</p>
       <p>Aviation ash advisories (VAAC) give plume tops above sea level, usually in
       feet. You can type <code>30000 ft</code> or <code>9000 m</code>. Subtract the
       vent height first if your number is above sea level.</p>`
@@ -107,8 +107,8 @@ export const HELP = {
     title: 'Speed at 12 km',
     html: `<p>About the cruising height of airliners and the level of the jet
       stream. Over southern Japan in winter the jet at this height often blows
-      faster than 50&nbsp;m/s. That is why tall winter plumes from Sakurajima are
-      stretched so far to the east.</p>`
+      faster than 50&nbsp;m/s. That is why tall winter plumes from Kyushu volcanoes
+      are stretched so far to the east.</p>`
   },
   shear: {
     title: 'Directional shear',

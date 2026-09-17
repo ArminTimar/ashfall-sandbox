@@ -22,10 +22,10 @@ const OUT_DIR = join(ROOT, 'dist');
 const CACHE = join(ROOT, 'tools', '.cache');
 const THREE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
 
-// Dependency order. params.js has no imports; main.js is the entry point.
+// Dependency order. proj.js has no imports; main.js is the entry point.
 const ORDER = [
-  'params.js', 'physics.js', 'grid.js', 'terrain.js',
-  'texture.js', 'particles.js', 'vectors.js', 'scene.js',
+  'proj.js', 'params.js', 'physics.js', 'grid.js', 'terrain.js', 'volcanoes.js',
+  'texture.js', 'particles.js', 'terrainmesh.js', 'vectors.js', 'scene.js',
   'parse.js', 'vei.js', 'help.js', 'ui.js', 'main.js'
 ];
 
@@ -89,6 +89,7 @@ async function getThree() {
 const html = await readFile(join(ROOT, 'index.html'), 'utf8');
 const css = await readFile(join(ROOT, 'css', 'style.css'), 'utf8');
 const terrain = await readFile(join(ROOT, 'data', 'terrain.png'));
+const terrainMeta = await readFile(join(ROOT, 'data', 'terrain.json'), 'utf8');
 const vectors = await readFile(join(ROOT, 'data', 'vectors.json'), 'utf8');
 const three = await getThree();
 
@@ -127,9 +128,11 @@ const bundle = [
   'const __M = {};',
   `const __TERRAIN_URL = ${JSON.stringify(terrainUrl)};`,
   `const __VECTORS = ${vectors};`,
+  `const __TERRAIN_META = ${terrainMeta};`,
   ...modules
 ].join('\n\n')
-  .replace(/loadTerrain\((['"])data\/terrain\.png\1\)/g, 'loadTerrain(__TERRAIN_URL)')
+  .replace(/loadTerrain\((['"])data\/terrain\.png\1, (['"])data\/terrain\.json\2\)/g,
+    'loadTerrain(__TERRAIN_URL, __TERRAIN_META)')
   .replace(/loadVectors\((['"])data\/vectors\.json\1\)/g, 'loadVectors(__VECTORS)');
 
 let out = html

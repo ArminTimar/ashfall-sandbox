@@ -1,39 +1,114 @@
-// Wiring. Load terrain, build the texture, start the scene, connect the UI.
+// Wiring. Load terrain and map data, build the texture, start the scene,
+// connect the UI.
 
 import { P } from './params.js';
-import { field, stats, compute } from './physics.js';
+import { makeField, computeField, clearField } from './physics.js';
 import { loadTerrain } from './terrain.js';
-import { initTexture, paintTexture, fieldTex } from './texture.js';
-import { seedParticles, replayEruption, parts, partXY, clock } from './particles.js';
-import { initScene, renderFrame, resize, setView, applyExaggeration, markTextureDirty, setPlumeVisible, addVectors, setVectorLayer, setPlacesVisible, orbit } from './scene.js';
+import { initTexture, paintTexture, rampCSS } from './texture.js';
+import { makeCloud, seedCloud, replayCloud, particleBudget, NP_TOTAL } from './particles.js';
+import {
+  initScene, renderFrame, resize, setView, flyTo, setFocus, applyExaggeration, markTextureDirty,
+  setPlumeVisible, addVectors, setVectorLayer, setPlacesVisible, applyTheme, refreshVentLabels,
+  orbit, getRenderCanvas, debugStats
+} from './scene.js';
 import { loadVectors } from './vectors.js';
-import { bindUI, syncInputs, syncLabels, syncMode, updateClock, updateReadout } from './ui.js';
+import { VOLCANOES } from './volcanoes.js';
+import {
+  bindUI, syncLabels, syncMode, updateClock, updateReadout, selectedVolcano, setPlaces,
+  syncFocus, syncTheme
+} from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const showContours = () => $('t-cont').checked;
 
-function recompute({ reseed = true } = {}) {
-  compute();
-  paintTexture(showContours());
-  markTextureDirty();
-  updateReadout();
-  syncLabels();
-  // The deposit is a steady-state solution and snaps to the new parameters at
-  // once. A steady cloud carries drift accumulated under the previous wind, so
-  // without a reseed it keeps pointing the old way while the ground below it
-  // already shows the new answer.
-  //
-  // An eruption run is deliberately left alone: it is a single event playing
-  // out in time, and restarting it on every slider movement would make it
-  // impossible to watch. Use Replay to start a new one under the new numbers.
-  if (reseed && P.mode !== 'eruption' && parts.length) seedParticles();
+function readTheme() {
+  try {
+    const t = localStorage.getItem('ashfall-theme');
+    if (t === 'dark' || t === 'light') return t;
+  } catch (e) { /* storage blocked: use the default */ }
+  return 'dark';
 }
 
-let pending = null;
+/** Particle budget for one volcano, shared out when several are erupting. */
+function budgetFor(v) {
+  const n = VOLCANOES.filter((x) => x.erupting).length;
+  return Math.min(particleBudget(v.p.logM), Math.floor(NP_TOTAL / Math.max(n, 1)));
+}
+
+function ensure(v) {
+  if (!v.field) v.field = makeField();
+  if (!v.cloud) v.cloud = makeCloud(v.E, v.N, v.ventZ);
+}
+
+function computeVolcano(v) {
+  if (v.erupting) {
+    ensure(v);
+    computeField(v.p, v.E, v.N, v.ventZ, v.field);
+  } else if (v.field) {
+    clearField(v.field);
+  }
+}
+
+function repaint() {
+  const fields = VOLCANOES.filter((v) => v.field).map((v) => v.field);
+  const maxMM = paintTexture(fields, showContours());
+  markTextureDirty();
+  updateReadout(maxMM);
+}
+
+function restartCloud(v) {
+  if (!v.erupting) { if (v.cloud) v.cloud.parts.length = 0; return; }
+  ensure(v);
+  if (P.mode === 'eruption') replayCloud(v.cloud, v.p, budgetFor(v));
+  else seedCloud(v.cloud, v.p, budgetFor(v));
+}
+
+function recompute(v = selectedVolcano(), { reseed = true } = {}) {
+  computeVolcano(v);
+  repaint();
+  syncLabels();
+  // The deposit is a steady-state solution and jumps to the new parameters at
+  // once, so a steady cloud is re-seeded to match. An eruption run is left
+  // alone, so it can be watched while settings change. Replay starts a new one.
+  if (reseed && v.erupting && P.mode !== 'eruption') seedCloud(v.cloud, v.p, budgetFor(v));
+}
+
+// While a slider is dragged the deposit updates every frame, but the cloud is
+// only re-seeded once the value has stopped changing for a moment. Seeding a
+// large cloud takes tens of milliseconds and would otherwise halve the frame
+// rate of the drag.
+let pending = null, reseedTimer = null;
 function schedule() {
   syncLabels();
+  const v = selectedVolcano();
   if (pending) cancelAnimationFrame(pending);
-  pending = requestAnimationFrame(() => { pending = null; recompute(); });
+  pending = requestAnimationFrame(() => { pending = null; recompute(v, { reseed: false }); });
+  clearTimeout(reseedTimer);
+  reseedTimer = setTimeout(() => {
+    if (v.erupting && v.cloud && P.mode !== 'eruption') seedCloud(v.cloud, v.p, budgetFor(v));
+  }, 180);
+}
+
+function setTheme(t) {
+  applyTheme(t);
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('ashfall-theme', t); } catch (e) { /* not saved */ }
+  document.querySelector('.ramp .bar').style.background = rampCSS(t);
+  repaint();
+  syncTheme();
+}
+
+function saveImage() {
+  const v = selectedVolcano();
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  getRenderCanvas().toBlob((blob) => {
+    if (!blob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ashfall-${v.id}-${stamp}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }, 'image/png');
 }
 
 let last = performance.now();
@@ -45,53 +120,65 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// The map layers are optional decoration for a physics model, so they are
-// fetched alongside the terrain but never allowed to block it: if Overpass
-// output is missing or malformed the sandbox still runs, minus the roads.
+P.theme = readTheme();
+document.documentElement.dataset.theme = P.theme;
+
+// The map layers are optional decoration for a physics model, so they never
+// block the terrain. If they fail to load the sandbox still runs without roads.
 Promise.all([
-  loadTerrain('data/terrain.png'),
+  loadTerrain('data/terrain.png', 'data/terrain.json'),
   loadVectors('data/vectors.json').catch((err) => {
     console.warn('map layers unavailable:', err.message);
     return null;
   })
 ]).then(([, vectors]) => {
   initTexture();
-  initScene($('scene'));
-  if (vectors) addVectors(vectors);
-  syncInputs();
-  syncMode();
-  recompute({ reseed: false });
-  seedParticles();
+  initScene($('scene'), { onFocusChange: syncFocus });
+  if (vectors) { addVectors(vectors); setPlaces(vectors.places); } else setPlaces([]);
+  refreshVentLabels();
+  document.querySelector('.ramp .bar').style.background = rampCSS(P.theme);
+
+  for (const v of VOLCANOES) computeVolcano(v);
+  repaint();
+  for (const v of VOLCANOES) restartCloud(v);
   $('loading').classList.add('gone');
   window.addEventListener('resize', resize);
 
   bindUI({
     onModel: schedule,
     onExaggeration: applyExaggeration,
-    onPreset: () => recompute(),
-    onView: setView,
-    onReplay: () => {
-      if (P.mode === 'eruption') replayEruption(); else seedParticles();
+    onPreset: (v) => recompute(v),
+    onSelect: () => { syncLabels(); updateReadout(); repaint(); },
+    onErupt: (v) => {
+      computeVolcano(v);
+      repaint();
+      refreshVentLabels();
+      for (const x of VOLCANOES) restartCloud(x);
     },
+    onFly: (id) => { flyTo(id); syncFocus(id); },
+    onFocus: (id) => { if (id) flyTo(id); else setFocus(null); },
+    onTheme: setTheme,
+    onSave: saveImage,
+    onView: setView,
+    onReplay: () => { for (const v of VOLCANOES) restartCloud(v); },
     onToggle: () => {
       const on = $('t-part').checked;
       setPlumeVisible(on);
-      if (on) seedParticles();
-      paintTexture(showContours());
-      markTextureDirty();
+      if (on) for (const v of VOLCANOES) restartCloud(v);
+      repaint();
     },
     onLayer: (layers, on) => { for (const id of layers) setVectorLayer(id, on); },
     onPlaces: setPlacesVisible
   });
+  syncMode();
+  syncTheme();
+  syncFocus(orbit.focus);
 
   requestAnimationFrame(frame);
 
-  // Dev hook: lets you check that the field, the drawn copy and the particle
-  // cloud agree. See test/ for the automated versions.
-  window.__ash = {
-    P, field, fieldTex, parts: () => parts, partXY, clock,
-    stats: () => stats, recompute, seedParticles, replayEruption, orbit
-  };
+  // Dev hook for checking state from the console. See test/ for the
+  // automated versions.
+  window.__ash = { P, VOLCANOES, orbit, recompute, repaint, debugStats, setView, flyTo };
 }).catch((err) => {
   $('loading').textContent = 'Terrain failed to load. Is the page being served over http?';
   console.error(err);

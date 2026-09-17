@@ -509,3 +509,63 @@ button.help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 /* On a phone the corner badge runs into the view buttons; the title is in the
    masthead anyway. */
 @media (max-width: 520px) { .badge { display: none; } }
+
+/* ---------- volcano and camera controls ---------- */
+.vrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.vrow.sub { justify-content: space-between; margin-top: -2px; }
+.vrow.save { margin-top: 12px; }
+.vrow .lbl { font-size: 0.8rem; color: var(--ink-2); white-space: nowrap; }
+.col-ctl select {
+  flex: 1 1 auto; min-width: 0;
+  font: 600 0.82rem var(--f-ui);
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 3px;
+  padding: 5px 6px;
+}
+.col-ctl select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chk { display: flex; gap: 6px; align-items: center; font-size: 0.8rem; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.chk input { accent-color: var(--accent); width: 14px; height: 14px; }
+.note.vent { margin: 0; }
+button.p.small { padding: 4px 8px; font-size: 0.7rem; flex: none; }
+.sub-h {
+  margin: 12px 0 6px; font: 600 0.62rem var(--f-mono);
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.presets.single { grid-template-columns: 1fr; }
+ul.sources {
+  margin: 8px 0 0; padding-left: 16px;
+  font-size: 0.7rem; line-height: 1.45; color: var(--ink-2);
+}
+ul.sources li { margin-bottom: 3px; }
+ul.sources a { color: var(--accent-ink); }
+.needs-erupt.off { opacity: 0.45; }
+
+/* ---------- labels: airports and erupting vents ---------- */
+.pin.vent.erupting { color: #ff9a5c; }
+.pin.vent.erupting::before { border-bottom-color: #ff7a3c; }
+
+/* ---------- light map theme ---------- */
+#scene[data-theme="light"] { background: #cfe2f1; }
+.panel:has(#scene[data-theme="light"]) { background: #cfe2f1; border-color: #b8cadb; }
+#scene[data-theme="light"] .pin { color: #1d2630; text-shadow: 0 0 3px #fff, 0 0 2px #fff, 0 1px 2px rgba(255,255,255,.9); }
+#scene[data-theme="light"] .pin:not(.vent)::before { background: #1d2630; box-shadow: 0 0 0 1.5px rgba(255,255,255,.8); }
+#scene[data-theme="light"] .pin.t1 { color: #0d1318; }
+#scene[data-theme="light"] .pin.t1::before { background: #0d1318; box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px rgba(13,19,24,.35); }
+#scene[data-theme="light"] .pin.t3 { color: #4a5663; }
+#scene[data-theme="light"] .pin.t3::before { background: #4a5663; }
+#scene[data-theme="light"] .pin.airport { color: #234f78; }
+#scene[data-theme="light"] .pin.airport::before { background: #234f78; }
+#scene[data-theme="light"] .pin.vent, #scene[data-theme="light"] .pin.peak { color: #8a3a06; }
+#scene[data-theme="light"] .pin.vent::before { border-bottom-color: #a4480c; }
+#scene[data-theme="light"] .pin.vent.erupting { color: #c0360c; }
+#scene[data-theme="light"] .badge,
+#scene[data-theme="light"] .ramp .lbl,
+#scene[data-theme="light"] .ramp .cap,
+#scene[data-theme="light"] .legend { color: #33414e; text-shadow: 0 0 3px rgba(255,255,255,.8); }
+#scene[data-theme="light"] .legend .t1 { background: #0d1318; box-shadow: 0 0 0 1.5px rgba(13,19,24,.3); }
+#scene[data-theme="light"] .legend .t2 { background: #1d2630; }
+#scene[data-theme="light"] .legend .t3 { background: #4a5663; }
+#scene[data-theme="light"] .legend .vol { border-bottom-color: #a4480c; }
+#scene[data-theme="light"] .views button { background: rgba(255,255,255,.8); border-color: #9fb3c6; color: #2c3a47; }
+#scene[data-theme="light"] .views button:hover { color: #000; border-color: #56718a; }
+#scene[data-theme="light"] #loading { background: #cfe2f1; color: #33414e; }

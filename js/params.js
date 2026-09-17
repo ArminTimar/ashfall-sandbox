@@ -1,6 +1,7 @@
-// Domain constants, tunable state and scenario presets.
-// Deliberately free of imports so every other module and the tests can depend
-// on it without pulling in the DOM.
+// Physical constants, the map grid, display settings and fixed landmarks.
+// Free of DOM access so every other module and the tests can depend on it.
+
+import { toEN } from './proj.js';
 
 export const G = 9.81;            // m/s^2
 export const MU = 1.8e-5;         // Pa s, dynamic viscosity of air
@@ -9,92 +10,39 @@ export const HS = 8200;           // m, atmospheric scale height
 
 export const NPHI = 12;           // grain size bins
 export const NH = 16;             // release height bins
-export const N = 512;             // grid cells per side (matches data/terrain.png)
-
-// Terrain extents in km relative to Minamidake (31.5931 N, 130.6575 E).
-// These come from the GSI tile bounds; see tools/build_terrain.py.
-// One binding per statement: tools/bundle.mjs rewrites `export` declarations
-// and only handles a single declarator each.
-export const XW = -46.60;
-export const XE = 53.40;
-export const YS = -43.09;
-export const YN = 56.18;
-export const KMW = XE - XW;
-export const KMH = YN - YS;
-export const CELLX = (KMW * 1000) / N;
-export const CELLY = (KMH * 1000) / N;
-
-export const VENT_Z = 1060;       // m a.s.l., Minamidake summit
-
-// The geographic anchor of the whole model. Everything downstream is in
-// kilometres east and north of this point, so these four numbers have to agree
-// with tools/build_terrain.py and tools/build_vectors.py or the terrain, the
-// vectors and the physics end up in three slightly different places.
-export const VENT_LON = 130.6575;
-export const VENT_LAT = 31.5931;
-export const KM_PER_DEG_LAT = 110.574;
-export const KM_PER_DEG_LON = 111.320 * Math.cos((VENT_LAT * Math.PI) / 180);
-
-/** Longitude in degrees to kilometres east of the vent. */
-export function lonToX(lon) { return (lon - VENT_LON) * KM_PER_DEG_LON; }
-
-/** Latitude in degrees to kilometres north of the vent. */
-export function latToY(lat) { return (lat - VENT_LAT) * KM_PER_DEG_LAT; }
-
-// Fixed points, held as longitude/latitude so each one can be checked against
-// a map. The kilometre offsets are derived and never typed by hand. Typed
-// offsets are how Tarumizu once ended up out in Kagoshima Bay.
-//
-// Towns and cities are not listed here. They come from data/vectors.json,
-// built by tools/build_vectors.py. These are the vent, the two points the
-// readouts sample (key), and landmarks that are not settlements.
-//
-// Positions are OpenStreetMap. The vent is the Minamidake summit that defines
-// the origin. Kagoshima is the city's OpenStreetMap node, and it is labelled
-// from the data file, so it is not drawn twice.
-export const PLACES = [
-  { n: 'Minamidake',        lon: 130.65750, lat: 31.59310, kind: 'vent' },
-  { n: 'Kagoshima',         lon: 130.55719, lat: 31.59679, key: 'kago', kind: 'readout' },
-  { n: 'Kagoshima Airport', lon: 130.71944, lat: 31.80325, key: 'air', kind: 'airport' },
-  { n: 'Shinmoedake',       lon: 130.88470, lat: 31.90920, kind: 'peak' }
-].map((p) => Object.assign(p, { x: lonToX(p.lon), y: latToY(p.lat) }));
 
 /**
- * Live model parameters. Mutated in place by the UI so every module sees the
- * same object; treat it as the single source of truth.
- *   H      plume height above vent, km
- *   logM   log10 of erupted mass, kg
- *   phi    median grain size, phi units
- *   sig    grain size sorting, phi units
- *   suz    Suzuki column parameter A (mass peaks at 1 - 1/A of the height)
- *   dir    wind direction it blows FROM, degrees
- *   spd    wind speed at 2 km, m/s
- *   top    wind speed at 12 km, m/s
- *   shear  directional shear between those levels, degrees
- *   K      eddy diffusivity, m^2/s
- *   rho    deposit bulk density, kg/m^3 (thickness conversion only)
- *   ex     vertical exaggeration for display only
- *   mode   particle display: 'steady' or 'eruption' (display only)
- *   rate   model seconds per wall-clock second (display only)
- *   dur    eruption length in model seconds, 'eruption' mode only
+ * The map grid, in metres of JGD2011 / Japan Plane Rectangular CS II
+ * (EPSG:6670). Filled from data/terrain.json by terrain.js, or by a test.
+ * Cell (i, j) with j counted from the south has its centre at
+ * E = west + (i + 0.5) * cell, N = south + (j + 0.5) * cell.
  */
-export const P = {
-  H: 5, logM: 8.3, phi: 2.0, sig: 1.5, suz: 4,
-  dir: 100, spd: 12, top: 24, shear: -15,
-  K: 2500, rho: 1000, ex: 4,
-  mode: 'steady', rate: 45, dur: 1800
+export const GRID = {
+  epsg: 6670, west: 0, south: 0, east: 0, north: 0, cell: 200, nx: 0, ny: 0
 };
 
-export const PRESETS = {
-  routine: { H: 3.5, logM: 7.5, phi: 2.2, sig: 1.4, suz: 4, dir: 270, spd: 12, top: 26, shear:  10, K: 2000 },
-  large:   { H: 6.0, logM: 8.7, phi: 1.8, sig: 1.6, suz: 4, dir: 280, spd: 16, top: 34, shear:  15, K: 3000 },
-  taisho:  { H: 11.0, logM: 11.6, phi: 0.5, sig: 2.0, suz: 5, dir: 290, spd: 20, top: 48, shear: 25, K: 6000 },
-  summer:  { H: 4.5, logM: 8.0, phi: 2.0, sig: 1.5, suz: 4, dir: 105, spd: 11, top: 22, shear: -15, K: 2500 }
-};
-
-export function applyPreset(name) {
-  const pr = PRESETS[name];
-  if (!pr) return false;
-  for (const k in pr) P[k] = pr[k];
-  return true;
+export function setGrid(meta) {
+  for (const k of Object.keys(GRID)) if (k in meta) GRID[k] = meta[k];
+  return GRID;
 }
+
+/**
+ * Display settings shared by every volcano.
+ *   ex     vertical exaggeration
+ *   mode   particle display: 'steady' or 'eruption'
+ *   rate   model seconds per wall-clock second
+ *   theme  'dark' or 'light'
+ */
+export const P = { ex: 3, mode: 'steady', rate: 45, theme: 'dark' };
+
+// Airports, from OpenStreetMap. Settlements come from data/vectors.json.
+export const LANDMARKS = [
+  { n: 'Kagoshima Airport', lon: 130.71944, lat: 31.80325 },
+  { n: 'Kumamoto Airport',  lon: 130.85239, lat: 32.83625 },
+  { n: 'Fukuoka Airport',   lon: 130.44945, lat: 33.58681 },
+  { n: 'Oita Airport',      lon: 131.73522, lat: 33.48012 },
+  { n: 'Miyazaki Airport',  lon: 131.44794, lat: 31.87606 },
+  { n: 'Nagasaki Airport',  lon: 129.91350, lat: 32.91718 },
+  { n: 'Saga Airport',      lon: 130.30450, lat: 33.14942 },
+  { n: 'Kitakyushu Airport', lon: 131.03331, lat: 33.83897 }
+].map((p) => { const [E, N] = toEN(p.lon, p.lat); return Object.assign(p, { E, N, kind: 'airport' }); });

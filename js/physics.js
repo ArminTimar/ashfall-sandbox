@@ -11,8 +11,12 @@
 // sigma = 4K(t + tau), which works out to a per-axis variance of 2K(t + tau).
 // We use that convention so a K here means the same thing as a K in a
 // published Tephra2 inversion.
+//
+// Every function takes the eruption's parameters explicitly (an object with
+// H, logM, phi, sig, suz, dir, spd, top, shear, K, rho), because each volcano
+// on the map has its own eruption and its own wind.
 
-import { G, MU, RHO0, HS, NPHI, NH, N, XW, YS, CELLX, CELLY, VENT_Z, P } from './params.js';
+import { G, MU, RHO0, HS, NPHI, NH, GRID } from './params.js';
 
 /** Air density at altitude z (m), exponential atmosphere. */
 export function airRho(z) {
@@ -43,18 +47,14 @@ export const WIND_HI = 12000;
 /**
  * Wind at altitude z as east/north components, m/s.
  * Speed interpolates between the 2 km and 12 km values and is held constant
- * outside that range; direction rotates linearly by the shear angle over the
- * same range. P.dir is the direction the wind blows FROM, so travel is that
- * bearing plus 180 degrees.
- *
- * This used to interpolate from sea level (f = z / 12000), so the value the
- * panel labels "speed at 2 km" was really the speed at 0 km, and at 2 km the
- * wind was already a sixth of the way to the upper value.
+ * outside that range. Direction turns evenly by the shear angle over the same
+ * range. p.dir is the direction the wind blows FROM, so travel is that bearing
+ * plus 180 degrees.
  */
-export function windAt(z) {
+export function windAt(p, z) {
   const f = Math.max(0, Math.min((z - WIND_LO) / (WIND_HI - WIND_LO), 1));
-  const spd = P.spd + (P.top - P.spd) * f;
-  const t = ((P.dir + P.shear * f + 180) * Math.PI) / 180;
+  const spd = p.spd + (p.top - p.spd) * f;
+  const t = ((p.dir + p.shear * f + 180) * Math.PI) / 180;
   return { u: spd * Math.sin(t), v: spd * Math.cos(t) };
 }
 
@@ -63,7 +63,7 @@ export function windAt(z) {
  * recomputing settling velocity as air density changes and accumulating wind
  * drift. Returns fall time (s) and horizontal drift (m).
  */
-export function fallPath(H, d, rp) {
+export function fallPath(p, H, d, rp) {
   const dz = 100;
   let t = 0, dx = 0, dy = 0, z = H;
   while (z > 0) {
@@ -72,7 +72,7 @@ export function fallPath(H, d, rp) {
     let vs = vSettle(d, rp, airRho(zm));
     if (!(vs > 0.0001)) vs = 0.0001;
     const dt = st / vs;
-    const w = windAt(zm);
+    const w = windAt(p, zm);
     t += dt; dx += w.u * dt; dy += w.v * dt; z -= st;
   }
   return { t, dx, dy };
@@ -88,13 +88,13 @@ export function mastinMER(Hkm) {
 }
 
 /** Time a particle has already spent diffusing inside the rising plume. */
-export function plumeTau(htAboveVent) {
-  return (0.0032 * htAboveVent * htAboveVent) / P.K;
+export function plumeTau(p, htAboveVent) {
+  return (0.0032 * htAboveVent * htAboveVent) / p.K;
 }
 
 /** Per-axis variance of the horizontal spread after fall time t. */
-export function axisVar(t, tau) {
-  return 2 * P.K * (t + tau);
+export function axisVar(p, t, tau) {
+  return 2 * p.K * (t + tau);
 }
 
 // Box-Muller, cached pair.
@@ -110,13 +110,13 @@ export function gauss() {
 }
 
 /** Grain size bins: Gaussian in phi, truncated at phi 5 (31 um) and renormalised. */
-export function grainBins() {
+export function grainBins(p) {
   const pMin = -5, pMax = 5, dphi = (pMax - pMin) / NPHI;
   const w = [], d = [], rho = [];
   let sum = 0;
   for (let j = 0; j < NPHI; j++) {
     const phi = pMin + dphi * (j + 0.5);
-    const wj = Math.exp(-Math.pow(phi - P.phi, 2) / (2 * P.sig * P.sig));
+    const wj = Math.exp(-Math.pow(phi - p.phi, 2) / (2 * p.sig * p.sig));
     w.push(wj); sum += wj;
     d.push(Math.pow(2, -phi) / 1000);
     rho.push(1200 + 1200 * ((phi - pMin) / (pMax - pMin)));
@@ -124,84 +124,178 @@ export function grainBins() {
   return { w: w.map((x) => x / sum), d, rho };
 }
 
-/** Release heights with Suzuki mass distribution; peak sits at 1 - 1/A. */
-export function heightBins() {
-  const Htop = VENT_Z + P.H * 1000;
+/** Release heights with Suzuki mass distribution. The peak sits at 1 - 1/A. */
+export function heightBins(p, ventZ) {
+  const Htop = ventZ + p.H * 1000;
   const w = [], z = [];
   let sum = 0;
   for (let i = 0; i < NH; i++) {
     const zeta = (i + 0.5) / NH;
-    const f = (1 - zeta) * Math.exp(P.suz * (zeta - 1));
+    const f = (1 - zeta) * Math.exp(p.suz * (zeta - 1));
     w.push(f); sum += f;
-    z.push(VENT_Z + (Htop - VENT_Z) * zeta);
+    z.push(ventZ + (Htop - ventZ) * zeta);
   }
   return { w: w.map((x) => x / sum), z };
 }
 
-// Deposit grid, stored SOUTH-UP: row 0 is the southern edge. The DEM and the
-// texture are north-up, so anything drawing from this must flip first —
-// see js/grid.js.
-export const field = new Float64Array(N * N);
-// A stable object mutated in place rather than a reassigned `let`, so importers
-// keep a valid reference without relying on ES live bindings. That also lets
-// tools/bundle.mjs flatten the modules for the single-file build.
-export const stats = { total: 0, M: 1, max: 0, a1: 0, mmFac: 1 };
+// ---------------------------------------------------------------------------
+// Deposit fields
+// ---------------------------------------------------------------------------
+//
+// Each erupting volcano has a field covering the whole map grid, stored
+// SOUTH-UP (row 0 is the southern edge) as kg/m^2 at cell centres. The DEM and
+// the texture are north-up, so anything drawing from a field must flip rows.
+// See js/grid.js.
+//
+// A field is only ever non-zero inside its bbox, which is cleared before each
+// recompute. Painting and statistics only visit that box.
+//
+// Spreading a Gaussian with a sigma of tens of kilometres over 200 m cells
+// would mean millions of evaluations per kernel. Instead each kernel is
+// sampled on a coarser lattice whose spacing is at most a third of its sigma (every
+// 2nd, 4th ... 64th cell), and each lattice is interpolated back up to 200 m
+// once, after all kernels are in. Sampling a Gaussian at a third of a sigma and
+// interpolating linearly is accurate to about 1% at the peak and keeps
+// the total mass.
 
-/** Recompute the deposit field and its summary statistics. */
-export function compute() {
-  field.fill(0);
-  const M = Math.pow(10, P.logM);
-  const g = grainBins();
-  const h = heightBins();
-  const sigFloor = Math.max(CELLX, CELLY) * 0.6;
-  const x0m = XW * 1000, y0m = YS * 1000;
+const MAX_STRIDE = 64;
+const levels = new Map();   // stride -> { nx, ny, data, bbox }
+
+function level(st) {
+  let L = levels.get(st);
+  const nx = Math.floor((GRID.nx - 1) / st) + 2;
+  const ny = Math.floor((GRID.ny - 1) / st) + 2;
+  if (!L || L.nx !== nx || L.ny !== ny) {
+    L = { nx, ny, data: new Float32Array(nx * ny), bbox: null };
+    levels.set(st, L);
+  }
+  return L;
+}
+
+function grow(b, i0, i1, j0, j1) {
+  if (!b) return [i0, i1, j0, j1];
+  b[0] = Math.min(b[0], i0); b[1] = Math.max(b[1], i1);
+  b[2] = Math.min(b[2], j0); b[3] = Math.max(b[3], j1);
+  return b;
+}
+
+/** An empty field for the current grid. */
+export function makeField() {
+  return {
+    data: new Float32Array(GRID.nx * GRID.ny),
+    bbox: null,                   // [i0, i1, j0, j1] inclusive, south-up rows
+    stats: { total: 0, M: 1, max: 0, a1: 0, mmFac: 1 }
+  };
+}
+
+/** Zero a field inside its bbox. */
+export function clearField(f) {
+  if (!f.bbox) return;
+  const [i0, i1, j0, j1] = f.bbox;
+  const nx = GRID.nx;
+  for (let j = j0; j <= j1; j++) f.data.fill(0, j * nx + i0, j * nx + i1 + 1);
+  f.bbox = null;
+}
+
+/**
+ * Recompute one eruption's deposit.
+ * @param {object} p eruption parameters
+ * @param {number} ventE vent easting, m (EPSG:6670)
+ * @param {number} ventN vent northing, m
+ * @param {number} ventZ vent elevation, m
+ * @param {object} f field from makeField(), reused
+ */
+export function computeField(p, ventE, ventN, ventZ, f) {
+  clearField(f);
+  const { nx, ny, cell, west, south } = GRID;
+  const M = Math.pow(10, p.logM);
+  const g = grainBins(p);
+  const h = heightBins(p, ventZ);
+  const sigFloor = cell * 0.6;
+  // Vent in fractional cell-centre index coordinates.
+  const vx = (ventE - west) / cell - 0.5;
+  const vy = (ventN - south) / cell - 0.5;
+  const gxs = new Float64Array(512), gys = new Float64Array(512);
+  const used = new Set();
 
   for (let i = 0; i < NH; i++) {
     for (let j = 0; j < NPHI; j++) {
       const m = M * h.w[i] * g.w[j];
-      if (m <= 0) continue;
-      const fp = fallPath(h.z[i], g.d[j], g.rho[j]);
-      // Floor sigma at ~0.6 of a cell so coarse near-vent clasts do not alias
-      // into single-cell spikes.
-      const sg = Math.max(Math.sqrt(axisVar(fp.t, plumeTau(h.z[i] - VENT_Z))), sigFloor);
-      const cx = fp.dx, cy = fp.dy;
+      if (!(m > 0)) continue;
+      const fp = fallPath(p, h.z[i], g.d[j], g.rho[j]);
+      const sg = Math.max(Math.sqrt(axisVar(p, fp.t, plumeTau(p, h.z[i] - ventZ))), sigFloor);
+      let st = 1;
+      while (st < MAX_STRIDE && st * 2 * cell <= sg / 3) st *= 2;
+      const L = st === 1 ? null : level(st);
+      const Lnx = L ? L.nx : nx, Lny = L ? L.ny : ny;
+      const cx = vx + fp.dx / cell, cy = vy + fp.dy / cell;
+      const reach = (4 * sg) / cell;
+      const a0 = Math.max(0, Math.ceil((cx - reach) / st));
+      const a1 = Math.min(Lnx - 1, Math.floor((cx + reach) / st));
+      const b0 = Math.max(0, Math.ceil((cy - reach) / st));
+      const b1 = Math.min(Lny - 1, Math.floor((cy + reach) / st));
+      if (a1 < a0 || b1 < b0 || a1 - a0 >= 512 || b1 - b0 >= 512) continue;
+      const inv = (cell * cell) / (2 * sg * sg);
+      for (let a = a0; a <= a1; a++) { const d = a * st - cx; gxs[a - a0] = Math.exp(-d * d * inv); }
+      for (let b = b0; b <= b1; b++) { const d = b * st - cy; gys[b - b0] = Math.exp(-d * d * inv); }
       const peak = m / (2 * Math.PI * sg * sg);
-      const reach = 4 * sg;                       // evaluate only within 4 sigma
-      const i0 = Math.max(0, Math.floor((cx - reach - x0m) / CELLX));
-      const i1 = Math.min(N - 1, Math.ceil((cx + reach - x0m) / CELLX));
-      const j0 = Math.max(0, Math.floor((cy - reach - y0m) / CELLY));
-      const j1 = Math.min(N - 1, Math.ceil((cy + reach - y0m) / CELLY));
-      if (i1 < i0 || j1 < j0) continue;
-      const inv = 1 / (2 * sg * sg);
-      for (let gy = j0; gy <= j1; gy++) {
-        const yy = y0m + (gy + 0.5) * CELLY - cy;
-        const y2 = yy * yy;
-        const row = gy * N;
-        for (let gx = i0; gx <= i1; gx++) {
-          const xx = x0m + (gx + 0.5) * CELLX - cx;
-          field[row + gx] += peak * Math.exp(-(xx * xx + y2) * inv);
-        }
+      const arr = L ? L.data : f.data;
+      for (let b = b0; b <= b1; b++) {
+        const wy = peak * gys[b - b0];
+        const row = b * Lnx;
+        for (let a = a0; a <= a1; a++) arr[row + a] += wy * gxs[a - a0];
       }
+      if (L) { L.bbox = grow(L.bbox, a0, a1, b0, b1); used.add(st); }
+      else f.bbox = grow(f.bbox, a0, a1, b0, b1);
     }
   }
 
-  let total = 0, max = 0, a1 = 0;
-  const cellA = CELLX * CELLY;
-  const mmFac = 1000 / P.rho;
-  for (let k = 0; k < field.length; k++) {
-    const L = field[k];
-    total += L * cellA;
-    if (L > max) max = L;
-    if (L * mmFac > 1) a1 += cellA;
+  // Interpolate every coarse lattice up to the 200 m grid, then clear it.
+  for (const st of used) {
+    const L = levels.get(st);
+    const [a0, a1, b0, b1] = L.bbox;
+    const i0 = a0 * st, i1 = Math.min(nx - 1, a1 * st);
+    const j0 = b0 * st, j1 = Math.min(ny - 1, b1 * st);
+    for (let jj = j0; jj <= j1; jj++) {
+      const b = Math.min(Math.floor(jj / st), L.ny - 2), ty = (jj - b * st) / st;
+      const r0 = b * L.nx, r1 = r0 + L.nx, out = jj * nx;
+      for (let ii = i0; ii <= i1; ii++) {
+        const a = Math.min(Math.floor(ii / st), L.nx - 2), tx = (ii - a * st) / st;
+        const top = L.data[r0 + a] + (L.data[r0 + a + 1] - L.data[r0 + a]) * tx;
+        const bot = L.data[r1 + a] + (L.data[r1 + a + 1] - L.data[r1 + a]) * tx;
+        f.data[out + ii] += top + (bot - top) * ty;
+      }
+    }
+    for (let b = b0; b <= b1; b++) L.data.fill(0, b * L.nx + a0, b * L.nx + a1 + 1);
+    L.bbox = null;
+    f.bbox = grow(f.bbox, i0, i1, j0, j1);
   }
-  Object.assign(stats, { total, M, max, a1: a1 / 1e6, mmFac });
-  return stats;
+
+  let total = 0, max = 0, a1 = 0;
+  const cellA = cell * cell;
+  const mmFac = 1000 / p.rho;
+  if (f.bbox) {
+    const [i0, i1, j0, j1] = f.bbox;
+    for (let jj = j0; jj <= j1; jj++) {
+      const row = jj * nx;
+      for (let ii = i0; ii <= i1; ii++) {
+        const Lv = f.data[row + ii];
+        total += Lv;
+        if (Lv > max) max = Lv;
+        if (Lv * mmFac > 1) a1++;
+      }
+    }
+  }
+  Object.assign(f.stats, { total: total * cellA, M, max, a1: (a1 * cellA) / 1e6, mmFac });
+  return f.stats;
 }
 
-/** Deposit load (kg/m^2) at a point given in km relative to the vent. */
-export function sampleAt(xkm, ykm) {
-  const gx = Math.floor(((xkm - XW) * 1000) / CELLX);
-  const gy = Math.floor(((ykm - YS) * 1000) / CELLY);
-  if (gx < 0 || gy < 0 || gx >= N || gy >= N) return 0;
-  return field[gy * N + gx];
+/** Deposit load (kg/m^2) of one field at a point in metres. */
+export function sampleField(f, E, N) {
+  if (!f || !f.bbox) return 0;
+  const i = Math.floor((E - GRID.west) / GRID.cell);
+  const j = Math.floor((N - GRID.south) / GRID.cell);
+  const [i0, i1, j0, j1] = f.bbox;
+  if (i < i0 || i > i1 || j < j0 || j > j1) return 0;
+  return f.data[j * GRID.nx + i];
 }

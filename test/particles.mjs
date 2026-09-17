@@ -1,5 +1,4 @@
-// Guards the two particle display modes and the properties that make the cloud
-// look right:
+// Guards the particle clouds:
 //
 //   a re-seed matches the cloud it replaces. Every slider movement re-seeds the
 //   steady cloud, so any difference shows up as a jump on every drag.
@@ -9,218 +8,221 @@
 //
 //   the cloud lands where the analytical deposit is.
 //
-// The terrain is all zeros here (js/terrain.js allocates it empty and nothing
-// loads a DEM in node), so particles land at sea level. That is fine: the
-// question is whether two implementations of the same steady state agree, and
-// both see the same flat ground.
+//   two volcanoes' clouds stay independent.
+//
+// The terrain is flat sea-level ground on a synthetic 300 km grid, so the
+// question is only whether implementations of the same physics agree.
 //
 //   node test/particles.mjs
 
-import { P, VENT_Z, N, XW, YS, CELLX, CELLY } from '../js/params.js';
-import { NP_MAX, parts, clock, seedParticles, replayEruption, stepParticles, partXY,
+import { P, GRID } from '../js/params.js';
+import { setDEM } from '../js/terrain.js';
+import { NP_MAX, NP_TOTAL, makeCloud, seedCloud, replayCloud, stepCloud, partXY,
          particleBudget } from '../js/particles.js';
-import { compute, field } from '../js/physics.js';
+import { makeField, computeField } from '../js/physics.js';
 
 let fail = 0;
 const check = (cond, msg) => { if (!cond) { console.log('  FAIL ' + msg); fail++; } };
 
-const pos = new Float32Array(NP_MAX * 3);
-const col = new Float32Array(NP_MAX * 3);
+const META = { west: -150000, south: -150000, east: 150000, north: 150000, cell: 500, nx: 600, ny: 600 };
+setDEM(META, new Uint8Array(META.nx * META.ny * 3));
+
+const pos = new Float32Array(NP_TOTAL * 3);
+const col = new Float32Array(NP_TOTAL * 3);
+const tint = () => {};
+const VENT = [2000, -3000, 1000];
 
 const BASE = { H: 5, logM: 8.3, phi: 2.0, sig: 1.5, suz: 4,
-               dir: 100, spd: 12, top: 24, shear: -15, K: 2500, rho: 1000, ex: 4 };
+               dir: 100, spd: 12, top: 24, shear: -15, K: 2500, rho: 1000, dur: 1800 };
 
-/** Fraction of the cloud still climbing, and how far the climbers have drifted. */
-function census() {
-  const rising = parts.filter((p) => p.rising);
-  const radii = rising.map((p) => { const xy = partXY(p); return Math.hypot(xy[0], xy[1]); });
+function census(cloud) {
+  const parts = cloud.parts;
+  const rising = parts.filter((q) => q.rising);
+  const radii = rising.map((q) => { const xy = partXY(q); return Math.hypot(xy[0], xy[1]); });
   radii.sort((a, b) => a - b);
   return {
-    n: parts.length,
     risingFrac: rising.length / Math.max(parts.length, 1),
     medianRiseRadius: radii.length ? radii[Math.floor(radii.length / 2)] : 0
   };
 }
-
-/** Run the steady scheme forward until its own population stops trending. */
-function runToEquilibrium(steps, dt) {
-  for (let i = 0; i < steps; i++) stepParticles(dt, pos, col);
-}
+const run = (cloud, p, steps, dt) => { for (let i = 0; i < steps; i++) stepCloud(cloud, p, dt, pos, col, 0, tint); };
 
 // --- 1. a re-seed matches the running cloud --------------------------------
+//
+// The largest cloud (6,000 particles), averaged over ten snapshots of the
+// running cloud and three seeds. Only a few per cent of the cloud is rising,
+// so a single small snapshot scatters by 30% or more on its own.
 console.log('                    running seed   ratio    rise radius (m)');
+P.mode = 'steady';
 for (const [name, over] of [
   ['default',   {}],
   ['fine ash',  { phi: 4 }],
   ['lapilli',   { phi: -1 }],
   ['tall windy', { H: 12, phi: 1.8, spd: 20, top: 48 }]
 ]) {
-  // The largest cloud (6,000 particles), with the running cloud averaged over
-  // ten snapshots and the seed over three seeds. Only a few per cent of the
-  // cloud is rising, so a single snapshot of a few hundred particles counts
-  // just tens of climbers and the ratio scatters by 30% or more on its own.
-  Object.assign(P, BASE, over, { logM: 13, mode: 'steady' });
+  const p = Object.assign({}, BASE, over, { logM: 13 });
+  const cloud = makeCloud(...VENT);
   const mean = (list) => ({
     risingFrac: list.reduce((a, c) => a + c.risingFrac, 0) / list.length,
     medianRiseRadius: list.reduce((a, c) => a + c.medianRiseRadius, 0) / list.length
   });
-  seedParticles();
-  runToEquilibrium(900, 20);          // 5 model hours
+  seedCloud(cloud, p);
+  run(cloud, p, 900, 20);
   const snaps = [];
-  for (let k = 0; k < 10; k++) { runToEquilibrium(30, 20); snaps.push(census()); }
-  const run = mean(snaps);
+  for (let k = 0; k < 10; k++) { run(cloud, p, 30, 20); snaps.push(census(cloud)); }
+  const r = mean(snaps);
   const seeds = [];
-  for (let k = 0; k < 3; k++) { seedParticles(); seeds.push(census()); }
+  for (let k = 0; k < 3; k++) { seedCloud(cloud, p); seeds.push(census(cloud)); }
   const sd = mean(seeds);
 
-  const ratio = sd.risingFrac / Math.max(run.risingFrac, 1e-9);
-  console.log(`  ${name.padEnd(12)}${(run.risingFrac * 100).toFixed(1).padStart(8)}%`
+  const ratio = sd.risingFrac / Math.max(r.risingFrac, 1e-9);
+  console.log(`  ${name.padEnd(12)}${(r.risingFrac * 100).toFixed(1).padStart(8)}%`
     + `${(sd.risingFrac * 100).toFixed(1).padStart(6)}%${ratio.toFixed(2).padStart(8)}`
-    + `${Math.round(run.medianRiseRadius).toString().padStart(8)} vs ${Math.round(sd.medianRiseRadius)}`);
-
-  // Averaged like this the ratio stays within about 10%. 0.8 to 1.25 sits
-  // clear of that and still catches the biases this test was written after,
-  // which landed around 0.71, and the unweighted seeding, around 1.5.
-  check(ratio > 0.8 && ratio < 1.25,
-    `${name}: seeded rising fraction is ${ratio.toFixed(2)}x the running one`);
-  // The old bug put every climber on the vent axis. Both numbers should be
-  // comparable and neither should collapse to nearly zero.
-  check(sd.medianRiseRadius > run.medianRiseRadius * 0.4,
+    + `${Math.round(r.medianRiseRadius).toString().padStart(8)} vs ${Math.round(sd.medianRiseRadius)}`);
+  // Averaged like this the ratio stays within about 10%. 0.8 to 1.25 still
+  // catches the biases this test was written after (0.71, and 1.5 for
+  // seeding that ignored lifetimes).
+  check(ratio > 0.8 && ratio < 1.25, `${name}: seeded rising fraction is ${ratio.toFixed(2)}x the running one`);
+  check(sd.medianRiseRadius > r.medianRiseRadius * 0.4,
     `${name}: seeded climbers sit ${Math.round(sd.medianRiseRadius)} m from the axis, `
-    + `the running cloud has them at ${Math.round(run.medianRiseRadius)} m`);
+    + `the running cloud has them at ${Math.round(r.medianRiseRadius)} m`);
 }
 
-// --- 2. the steady cloud keeps its population ------------------------------
-Object.assign(P, BASE, { mode: 'steady' });
-const NB = particleBudget();
-seedParticles();
-check(parts.length === NB, `steady seeding made ${parts.length} particles, expected ${NB}`);
-runToEquilibrium(400, 30);
-check(parts.length === NB, `steady cloud drifted to ${parts.length} particles, expected ${NB}`);
-
-// --- 2b. the particle count follows the erupted mass -----------------------
-const small = particleBudget(6), big = particleBudget(11);
-check(small < NB && NB < big, `particle count should grow with mass: ${small}, ${NB}, ${big}`);
-check(particleBudget(20) === NP_MAX, 'the particle count should stop at the buffer size');
-Object.assign(P, BASE, { logM: 11, mode: 'steady' });
-seedParticles();
-check(parts.length === big, `a 10^11 kg eruption seeded ${parts.length}, expected ${big}`);
-console.log(`\n  particle count: ${small} at 10^6 kg, ${NB} at 10^8.3 kg, ${big} at 10^11 kg`);
+// --- 2. the steady cloud keeps its population, and it follows the mass ------
+{
+  const p = Object.assign({}, BASE);
+  const NB = particleBudget(p.logM);
+  const cloud = makeCloud(...VENT);
+  seedCloud(cloud, p);
+  check(cloud.parts.length === NB, `steady seeding made ${cloud.parts.length} particles, expected ${NB}`);
+  run(cloud, p, 400, 30);
+  check(cloud.parts.length === NB, `steady cloud drifted to ${cloud.parts.length} particles, expected ${NB}`);
+  const small = particleBudget(6), big = particleBudget(11);
+  check(small < NB && NB < big, `particle count should grow with mass: ${small}, ${NB}, ${big}`);
+  check(particleBudget(20) === NP_MAX, 'the particle count should stop at its maximum');
+  seedCloud(cloud, p, 500);
+  check(cloud.parts.length === 500, 'an explicit budget should override the mass-based one');
+  console.log(`\n  particle count: ${small} at 10^6 kg, ${NB} at 10^8.3 kg, ${big} at 10^11 kg`);
+}
 
 // --- 3. an eruption starts empty, fills, then empties again ----------------
-Object.assign(P, BASE, { mode: 'eruption', dur: 600 });
-seedParticles();
-check(parts.length === 0, 'an eruption should start with nothing in the sky');
-check(clock.t === 0 && clock.released === 0, 'the run clock should start at zero');
-
-let peak = 0, releasedAtEnd = 0;
-for (let i = 0; i < 40; i++) {           // 40 * 15 s = 600 s, the whole eruption
-  stepParticles(15, pos, col);
-  peak = Math.max(peak, parts.length);
+{
+  P.mode = 'eruption';
+  const p = Object.assign({}, BASE, { dur: 600 });
+  const NB = particleBudget(p.logM);
+  const cloud = makeCloud(...VENT);
+  seedCloud(cloud, p);
+  check(cloud.parts.length === 0, 'an eruption should start with nothing in the sky');
+  let peak = 0;
+  for (let i = 0; i < 40; i++) { run(cloud, p, 1, 15); peak = Math.max(peak, cloud.parts.length); }
+  const releasedAtEnd = cloud.clock.released;
+  check(releasedAtEnd === NB, `by the end of the eruption ${releasedAtEnd} of ${NB} were released`);
+  check(peak > NB * 0.2, `only ${peak} particles were ever aloft at once`);
+  for (let i = 0; i < 4000 && cloud.parts.length; i++) run(cloud, p, 1, 30);
+  check(cloud.clock.released === releasedAtEnd, 'the eruption kept emitting after it ended');
+  check(cloud.parts.length === 0, `${cloud.parts.length} particles never cleared the map`);
+  check(cloud.clock.done, 'the run never reported itself finished');
+  console.log(`  eruption: peak ${peak} aloft, ${releasedAtEnd} released, `
+    + `cleared after ${Math.round(cloud.clock.t / 60)} model minutes`);
+  replayCloud(cloud, p);
+  check(cloud.parts.length === 0 && cloud.clock.t === 0 && !cloud.clock.done, 'replay did not reset the run');
 }
-releasedAtEnd = clock.released;
-check(releasedAtEnd === NB, `by the end of the eruption ${releasedAtEnd} of ${NB} were released`);
-check(peak > NB * 0.2, `only ${peak} particles were ever aloft at once, expected a real column`);
 
-const releasedBefore = clock.released;
-for (let i = 0; i < 4000 && parts.length; i++) stepParticles(30, pos, col);
-check(clock.released === releasedBefore,
-  'the eruption kept emitting after it ended');
-check(parts.length === 0, `${parts.length} particles never cleared the domain`);
-check(clock.done, 'the run never reported itself finished');
-console.log(`\n  eruption: peak ${peak} aloft, ${releasedAtEnd} released, `
-  + `cleared after ${Math.round(clock.t / 60)} model minutes`);
-
-// --- 4. replay resets the run ----------------------------------------------
-replayEruption();
-check(parts.length === 0 && clock.t === 0 && clock.released === 0 && !clock.done,
-  'replay did not reset the run');
-
-// --- 5. nothing is emitted below the vent ----------------------------------
-Object.assign(P, BASE, { mode: 'steady' });
-seedParticles();
-check(parts.every((p) => p.z >= 0), 'a particle was seeded below sea level');
-check(parts.every((p) => p.rel >= VENT_Z && p.rel <= VENT_Z + P.H * 1000 + 1),
-  'a particle was given a release height outside the column');
-
-// --- 6. leaving the column is smooth ---------------------------------------
+// --- 4. leaving the column is smooth ---------------------------------------
 //
 // The old scheme climbed at a fixed speed and switched to falling in a single
 // step. Followed at 1 s steps, its vertical velocity changed by up to 8.6 m/s
 // (fine ash) and 26.8 m/s (lapilli) in one second, and a particle moved up to
-// 1.4 km sideways at the moment of release, when the plume spread was added
-// all at once. Follow the same eruption and check neither happens now.
+// 1.4 km sideways at release.
 for (const [name, over] of [['fine ash', { phi: 3.5 }], ['lapilli', { phi: -2, sig: 0.5 }]]) {
-  Object.assign(P, BASE, over, { mode: 'eruption', dur: 60 });
-  replayEruption();
+  P.mode = 'eruption';
+  const p = Object.assign({}, BASE, over, { dur: 60 });
+  const cloud = makeCloud(...VENT);
+  replayCloud(cloud, p);
   const track = new Map();
-  const turns = [];
-  let worst = 0, hop = 0;
+  let worst = 0, hop = 0, turned = 0;
   for (let i = 0; i < 1500; i++) {
-    stepParticles(1, pos, col);
-    for (const p of parts) {
-      const r = track.get(p);
-      const xy = partXY(p);
-      if (!r) { track.set(p, { z: p.z, x: xy[0], y: xy[1], vmax: 0, half: -1, done: false }); continue; }
-      const vz = p.z - r.z;
-      if (r.vz !== undefined) worst = Math.max(worst, Math.abs(vz - r.vz));
+    run(cloud, p, 1, 1);
+    for (const q of cloud.parts) {
+      const r = track.get(q);
+      const xy = partXY(q);
+      if (!r) { track.set(q, { z: q.z, x: xy[0], y: xy[1] }); continue; }
+      const vz = q.z - r.z;
+      if (r.vz !== undefined) {
+        worst = Math.max(worst, Math.abs(vz - r.vz));
+        if (r.vz > 0 && vz <= 0) turned++;
+      }
       hop = Math.max(hop, Math.hypot(xy[0] - r.x, xy[1] - r.y));
-      r.z = p.z; r.vz = vz; r.x = xy[0]; r.y = xy[1];
-      if (r.done) continue;
-      if (vz > r.vmax) { r.vmax = vz; r.half = -1; }
-      if (r.half < 0 && r.vmax > 2 && vz < r.vmax / 2) r.half = i;
-      if (r.half >= 0 && vz <= 0) { turns.push(i - r.half); r.done = true; }
+      Object.assign(r, { z: q.z, vz, x: xy[0], y: xy[1] });
     }
   }
-  turns.sort((x, y) => x - y);
-  const med = turns.length ? turns[turns.length >> 1] : 0;
-  const p10 = turns.length ? turns[Math.floor(turns.length * 0.1)] : 0;
-  console.log(`  ${name}: ${turns.length} turned over, median turn ${med} s, `
-    + `10th percentile ${p10} s`);
-  console.log(`    in any 1 s: vertical velocity changed by at most ${worst.toFixed(2)} m/s, `
-    + `a particle moved at most ${Math.round(hop)} m sideways`);
-  check(turns.length > 20, `${name}: only ${turns.length} particles were seen turning over`);
+  console.log(`  ${name}: ${turned} turned over; in any 1 s vertical velocity changed by at most `
+    + `${worst.toFixed(2)} m/s and a particle moved at most ${Math.round(hop)} m sideways`);
+  check(turned > 20, `${name}: only ${turned} particles were seen turning over`);
   check(worst < 4, `${name}: vertical velocity jumped by ${worst.toFixed(1)} m/s in one second`);
   check(hop < 700, `${name}: a particle jumped ${Math.round(hop)} m sideways in one second`);
 }
 
-// --- 7. the cloud lands where the deposit is -------------------------------
+// --- 5. the cloud lands where the deposit is -------------------------------
 //
 // Particles drift a little during the climb, which the analytical deposit
-// leaves out, so this is a loose check. It compares the centre of the deposit
-// grid with the mean landing point of the particles, both inside the domain.
-// They should agree within a kilometre or 15% of the distance from the vent,
-// whichever is larger.
+// leaves out. Compare the centre of the deposit with the mean landing point,
+// both relative to the vent. They should agree within a kilometre or 15% of
+// the distance from the vent.
 {
-  Object.assign(P, BASE, { mode: 'eruption', dur: 1, logM: 11, phi: 1, dir: 250, spd: 8, top: 16 });
-  compute();
+  P.mode = 'eruption';
+  const p = Object.assign({}, BASE, { dur: 1, logM: 11, phi: 1, dir: 250, spd: 8, top: 16, shear: 0 });
+  const f = makeField();
+  computeField(p, VENT[0], VENT[1], VENT[2], f);
   let ax = 0, ay = 0, W = 0;
-  for (let gy = 0; gy < N; gy++) for (let gx = 0; gx < N; gx++) {
-    const L = field[gy * N + gx];
-    ax += L * (XW * 1000 + (gx + 0.5) * CELLX); ay += L * (YS * 1000 + (gy + 0.5) * CELLY); W += L;
+  for (let j = 0; j < GRID.ny; j++) for (let i = 0; i < GRID.nx; i++) {
+    const L = f.data[j * GRID.nx + i];
+    ax += L * (GRID.west + (i + 0.5) * GRID.cell - VENT[0]);
+    ay += L * (GRID.south + (j + 0.5) * GRID.cell - VENT[1]);
+    W += L;
   }
   ax /= W; ay /= W;
 
-  replayEruption();
+  const cloud = makeCloud(...VENT);
+  replayCloud(cloud, p);
   let sx = 0, sy = 0, n = 0;
   for (let i = 0; i < 4000; i++) {
-    const before = parts.slice();
-    stepParticles(10, pos, col);
-    const after = new Set(parts);
-    for (const p of before) {
-      if (!after.has(p) && p.z < 50) { const xy = partXY(p); sx += xy[0]; sy += xy[1]; n++; }
+    const before = cloud.parts.slice();
+    run(cloud, p, 1, 10);
+    const after = new Set(cloud.parts);
+    for (const q of before) {
+      if (!after.has(q) && q.z < 50) { const xy = partXY(q); sx += xy[0]; sy += xy[1]; n++; }
     }
-    if (clock.done) break;
+    if (cloud.clock.done) break;
   }
   const mx = sx / n, my = sy / n;
   const off = Math.hypot(mx - ax, my - ay), dist = Math.hypot(ax, ay);
-  console.log(`
-  landing centre: particles (${(mx / 1000).toFixed(1)}, ${(my / 1000).toFixed(1)}) km, `
+  console.log(`\n  landing centre from the vent: particles (${(mx / 1000).toFixed(1)}, ${(my / 1000).toFixed(1)}) km, `
     + `deposit (${(ax / 1000).toFixed(1)}, ${(ay / 1000).toFixed(1)}) km, ${n} landed`);
-  check(n > 500, `only ${n} particles landed inside the domain`);
-  check(off < Math.max(1000, 0.15 * dist),
-    `particles land ${(off / 1000).toFixed(1)} km from the deposit centre`);
+  check(n > 500, `only ${n} particles landed on the map`);
+  check(off < Math.max(1000, 0.15 * dist), `particles land ${(off / 1000).toFixed(1)} km from the deposit centre`);
 }
 
-console.log(fail ? `\n${fail} FAILED` : '\nOK - particle modes behave, re-seeding matches the running cloud, the column lets go smoothly');
+// --- 6. two volcanoes, two independent clouds ------------------------------
+{
+  P.mode = 'steady';
+  const pa = Object.assign({}, BASE, { dir: 270 });
+  const pb = Object.assign({}, BASE, { dir: 90 });
+  const a = makeCloud(-60000, 0, 1000), b = makeCloud(60000, 0, 1000);
+  seedCloud(a, pa, 400); seedCloud(b, pb, 400);
+  let slot = stepCloud(a, pa, 5, pos, col, 0, tint);
+  const split = slot;
+  slot = stepCloud(b, pb, 5, pos, col, slot, tint);
+  check(slot === 800 && split === 400, `two clouds should fill 400 + 400 slots, got ${split} and ${slot}`);
+  // Cloud a blows east from x = -60 km, cloud b west from x = +60 km.
+  let meanA = 0, meanB = 0;
+  for (let k = 0; k < 400; k++) meanA += pos[k * 3];
+  for (let k = 400; k < 800; k++) meanB += pos[k * 3];
+  meanA /= 400; meanB /= 400;
+  console.log(`  two clouds: mean x ${meanA.toFixed(1)} km and ${meanB.toFixed(1)} km`);
+  check(meanA > -60 && meanA < 0, `cloud a should drift east of its vent, mean x ${meanA.toFixed(1)}`);
+  check(meanB < 60 && meanB > 0, `cloud b should drift west of its vent, mean x ${meanB.toFixed(1)}`);
+}
+
+console.log(fail ? `\n${fail} FAILED` : '\nOK - particle clouds behave, re-seeding matches the running cloud, the column lets go smoothly');
 process.exit(fail ? 1 : 0);

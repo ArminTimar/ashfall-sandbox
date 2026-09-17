@@ -11,15 +11,16 @@
 
 /**
  * Copy a south-up grid into a north-up one.
- * @param {ArrayLike<number>} src south-up, length n*n
- * @param {Float64Array} dst north-up, length n*n
- * @param {number} n side length
+ * @param {ArrayLike<number>} src south-up, length nx*ny
+ * @param {Float64Array} dst north-up, length nx*ny
+ * @param {number} nx columns
+ * @param {number} [ny] rows, defaults to nx
  */
-export function flipToNorthUp(src, dst, n) {
-  for (let y = 0; y < n; y++) {
-    const s = (n - 1 - y) * n;
-    const d = y * n;
-    for (let x = 0; x < n; x++) dst[d + x] = src[s + x];
+export function flipToNorthUp(src, dst, nx, ny = nx) {
+  for (let y = 0; y < ny; y++) {
+    const s = (ny - 1 - y) * nx;
+    const d = y * nx;
+    for (let x = 0; x < nx; x++) dst[d + x] = src[s + x];
   }
   return dst;
 }
@@ -51,15 +52,17 @@ export function niceLevels(maxMM, floor = 0.001) {
  * Marching squares over a north-up grid. Returns line segments in grid
  * coordinates, ready to stroke straight onto a canvas of the same size.
  * @param {ArrayLike<number>} grid north-up values
- * @param {number} n side length
+ * @param {number} w columns
  * @param {number} level threshold
  * @param {number} scale multiplier applied to grid values before comparing
+ * @param {number} [h] rows, defaults to w
  */
-export function contour(grid, n, level, scale = 1) {
+export function contour(grid, w, level, scale = 1, h = w) {
   const segs = [];
+  const n = w;
   const ip = (p, q, vp, vq) => p + (q - p) * ((level - vp) / (vq - vp));
-  for (let y = 0; y < n - 1; y++) {
-    for (let x = 0; x < n - 1; x++) {
+  for (let y = 0; y < h - 1; y++) {
+    for (let x = 0; x < w - 1; x++) {
       const a = grid[y * n + x] * scale;
       const b = grid[y * n + x + 1] * scale;
       const c = grid[(y + 1) * n + x + 1] * scale;
