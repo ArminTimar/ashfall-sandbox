@@ -25,7 +25,8 @@ const THREE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.mi
 // Dependency order. params.js has no imports; main.js is the entry point.
 const ORDER = [
   'params.js', 'physics.js', 'grid.js', 'terrain.js',
-  'texture.js', 'particles.js', 'vectors.js', 'scene.js', 'ui.js', 'main.js'
+  'texture.js', 'particles.js', 'vectors.js', 'scene.js',
+  'parse.js', 'vei.js', 'help.js', 'ui.js', 'main.js'
 ];
 
 /**

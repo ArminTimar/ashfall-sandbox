@@ -14,6 +14,21 @@ import {
   grainBins, heightBins
 } from '../js/physics.js';
 
+// Seeded, so the test gives the same answer every run. The spread of a
+// heavy-tailed mixture is a noisy statistic: at 20,000 samples it scattered by
+// about 2% between runs, so a 3% tolerance failed roughly one run in five with
+// nothing wrong. More samples shrink that scatter; the fixed seed removes the
+// remaining lottery. The seed is 1 — not chosen by trying seeds until one passed.
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+Math.random = mulberry32(1);   // also drives gauss() in physics.js
+
 Object.assign(P, { H: 6, logM: 8.7, phi: 1.8, sig: 1.6, suz: 4,
                    dir: 280, spd: 16, top: 34, shear: 15, K: 3000 });
 
@@ -57,9 +72,19 @@ function monteCarlo(n, dtModel) {
     while (z > 0) {
       let vs = vSettle(g.d[j], g.rho[j], airRho(Math.max(z, 0)));
       if (!(vs > 0.0001)) vs = 0.0001;
-      const w = windAt(Math.max(z, 0));
       const dt = Math.min(dtModel, z / vs);
-      z -= vs * dt; dx += w.u * dt; dy += w.v * dt;
+      // Wind at the middle of the step's descent, as fallPath uses. Taking it
+      // at the top instead is a first-order error that grows with the wind
+      // gradient: with the wind strengthening upward, a 20 s step of a fast
+      // grain over-drifts, and the x-spread came out 2-4% high at dt = 20 s
+      // while dt = 5 s agreed.
+      const w = windAt(Math.max(z - (vs * dt) / 2, 0));
+      // Land exactly. z - vs * (z / vs) can round to a positive denormal
+      // instead of zero, and the particle then "lands" for millions of steps
+      // of subnormal arithmetic — a 24 mm clast from mid-column did exactly
+      // that, and the test hung whenever it was sampled.
+      z = dt < dtModel ? 0 : z - vs * dt;
+      dx += w.u * dt; dy += w.v * dt;
       const sw = Math.sqrt(2 * P.K * dt);
       dx += gauss() * sw; dy += gauss() * sw;
     }
@@ -78,9 +103,9 @@ let fail = 0;
 console.log('                mean x    mean y   spread x  spread y   (km)');
 console.log(`analytic  ${pad(A.mx)}${pad(A.my)}${pad(A.sx)}${pad(A.sy)}`);
 for (const dt of [20, 5]) {
-  const M = monteCarlo(20000, dt);
+  const M = monteCarlo(60000, dt);
   console.log(`dt=${String(dt).padStart(2)}s    ${pad(M.mx)}${pad(M.my)}${pad(M.sx)}${pad(M.sy)}`);
-  // 2% on position, 3% on spread: loose enough for 20k samples of a
+  // 2% on position, 3% on spread: loose enough for 60k samples of a
   // heavy-tailed mixture, tight enough to catch a wrong constant.
   const rel = (a, b, scale) => Math.abs(a - b) / scale;
   const scale = Math.hypot(A.sx, A.sy);

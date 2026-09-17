@@ -36,14 +36,23 @@ export function vSettle(d, rp, ra) {
   return Math.sqrt((3.1 * G * d * dr) / ra);
 }
 
+// The two levels the wind is specified at, in metres above sea level.
+export const WIND_LO = 2000;
+export const WIND_HI = 12000;
+
 /**
  * Wind at altitude z as east/north components, m/s.
- * Speed interpolates between the 2 km and 12 km values; direction rotates
- * linearly by the shear angle over the same range. P.dir is the direction the
- * wind blows FROM, so travel is that bearing plus 180 degrees.
+ * Speed interpolates between the 2 km and 12 km values and is held constant
+ * outside that range; direction rotates linearly by the shear angle over the
+ * same range. P.dir is the direction the wind blows FROM, so travel is that
+ * bearing plus 180 degrees.
+ *
+ * This used to interpolate from sea level (f = z / 12000), so the value the
+ * panel labels "speed at 2 km" was really the speed at 0 km, and at 2 km the
+ * wind was already a sixth of the way to the upper value.
  */
 export function windAt(z) {
-  const f = Math.max(0, Math.min(z / 12000, 1));
+  const f = Math.max(0, Math.min((z - WIND_LO) / (WIND_HI - WIND_LO), 1));
   const spd = P.spd + (P.top - P.spd) * f;
   const t = ((P.dir + P.shear * f + 180) * Math.PI) / 180;
   return { u: spd * Math.sin(t), v: spd * Math.cos(t) };

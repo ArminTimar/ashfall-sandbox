@@ -132,12 +132,16 @@ function recordFall(rel, d, rp, ox, oy) {
     // leaps clean over the edge of a 50 km domain and counts the whole
     // overshoot as time spent inside it.
     let dt = Math.min(100 / vs, 400 / Math.max(wspd, 0.5), 120);
-    if (vs * dt > z) dt = z / vs;
+    let landing = false;
+    if (vs * dt >= z) { dt = z / vs; landing = true; }
     const sw = Math.sqrt(2 * P.K * dt);
     acc += dt;
     dx += w.u * dt + gauss() * sw;
     dy += w.v * dt + gauss() * sw;
-    z -= vs * dt;
+    // Set exactly zero on the landing step: z - vs * (z / vs) can round to a
+    // positive denormal, which would walk on to the step cap in subnormal
+    // arithmetic instead of stopping.
+    z = landing ? 0 : z - vs * dt;
     k++;
     _tt[k] = acc; _tx[k] = dx; _ty[k] = dy; _tz[k] = Math.max(z, 1);
     const xk = dx / 1000, yk = dy / 1000;

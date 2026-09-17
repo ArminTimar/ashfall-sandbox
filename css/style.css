@@ -78,20 +78,30 @@ a { color: var(--accent-ink); text-underline-offset: 2px; }
   text-transform: uppercase;
   color: var(--muted);
 }
-header { padding-block: 40px 22px; }
-header h1 { margin: 10px 0 12px; }
-.sub { font-size: 1.03rem; max-width: 66ch; }
-
 /* ---------- layout ---------- */
-.rig { display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start; }
+/* The map is the page. On a desktop the view column fills the window exactly —
+   scene plus readouts, no scrolling to reach either — and the title lives at
+   the top of the control column instead of above the map, where it used to
+   push the scene half off the first screen. */
+.rig {
+  display: grid; grid-template-columns: 1fr 312px; gap: 14px; align-items: start;
+  margin-top: 12px;
+  --fold: calc(100vh - 24px);
+}
+@supports (height: 100dvh) { .rig { --fold: calc(100dvh - 24px); } }
 
-/* The view stays put while the controls scroll on their own, so you can watch
-   the deposit change while reaching a slider further down the panel. */
 @media (min-width: 981px) {
-  .col-view { position: sticky; top: 12px; }
+  .col-view {
+    position: sticky; top: 12px;
+    height: var(--fold);
+    display: flex; flex-direction: column;
+  }
+  .col-view .panel { flex: 1 1 auto; min-height: 0; }
+  .col-view #scene { height: 100%; min-height: 320px; }
+  .col-view .readout { flex: none; margin-top: 12px; }
   .col-ctl {
     position: sticky; top: 12px;
-    max-height: calc(100vh - 24px);
+    max-height: var(--fold);
     overflow-y: auto;
     padding-right: 5px;
     scrollbar-width: thin;
@@ -103,9 +113,16 @@ header h1 { margin: 10px 0 12px; }
   .col-ctl::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 }
 @media (max-width: 980px) {
-  .rig { grid-template-columns: 1fr; }
+  .rig { grid-template-columns: 1fr; margin-top: 8px; }
   .col-view .panel { position: sticky; top: 0; z-index: 5; }
 }
+
+.masthead { padding: 2px 2px 12px; }
+.masthead h1 { font-size: 1.12rem; letter-spacing: -0.01em; }
+.masthead .tag { margin: 3px 0 0; font-size: 0.76rem; color: var(--muted); }
+
+.about { margin-top: 36px; max-width: 72ch; }
+.about h2 { margin: 8px 0 10px; font-size: 1.2rem; letter-spacing: -0.01em; }
 
 /* ---------- 3D panel ---------- */
 .panel {
@@ -122,7 +139,7 @@ header h1 { margin: 10px 0 12px; }
   cursor: grab;
   touch-action: none;
 }
-@media (max-width: 980px) { #scene { height: clamp(260px, 44vh, 420px); } }
+@media (max-width: 980px) { #scene { height: clamp(260px, 52vh, 460px); } }
 #scene.drag { cursor: grabbing; }
 #scene canvas { display: block; width: 100%; height: 100%; }
 
@@ -352,3 +369,98 @@ button.p[aria-pressed="true"] {
 .replay { display: flex; align-items: center; gap: 10px; }
 .replay button.p { flex: 0 0 auto; }
 .replay .val { font-variant-numeric: tabular-nums; }
+
+/* ---------- typed values ---------- */
+.field .top { align-items: center; }
+.num-wrap {
+  margin-left: auto;
+  display: inline-flex; align-items: baseline; gap: 3px;
+  white-space: nowrap;
+}
+.unit { font-family: var(--f-mono); font-size: 0.68rem; color: var(--muted); }
+.num {
+  width: 5.6ch;
+  font: 500 0.76rem/1.2 var(--f-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 1px dashed var(--line);
+  border-radius: 3px;
+  padding: 2px 4px;
+  margin: 0;
+}
+.num.wide { width: 8.6ch; }
+.num:hover { background: var(--surface-2); }
+.num:focus {
+  outline: none;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+  text-align: left;
+}
+.num[aria-invalid="true"] { border-color: #c0392b; }
+.hint {
+  margin-top: 1px;
+  font-size: 0.7rem; line-height: 1.35;
+  color: var(--muted);
+  text-align: right;
+}
+.hint:empty { display: none; }
+.hint.warn { color: var(--accent-ink); }
+
+.note code, .help-pop code {
+  font-family: var(--f-mono); font-size: 0.92em;
+  background: var(--surface-2); border-radius: 2px; padding: 0 3px;
+}
+.note.typing { margin: 10px 0 0; }
+
+/* ---------- help ---------- */
+button.help {
+  position: relative;
+  flex: none;
+  width: 15px; height: 15px; padding: 0;
+  border: 1px solid var(--line); border-radius: 50%;
+  background: var(--surface); color: var(--muted);
+  font: 700 0.6rem/13px var(--f-ui);
+  text-align: center;
+  cursor: help;
+  vertical-align: middle;
+}
+/* A 15 px circle is too small to hit with a thumb; widen the target, not the icon. */
+button.help::after { content: ""; position: absolute; inset: -7px; }
+button.help:hover,
+button.help[aria-expanded="true"] { color: var(--accent-ink); border-color: var(--accent); }
+button.help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.derived .dk button.help { margin-left: 4px; }
+.toggles { align-items: center; }
+.toggles button.help { margin-left: -8px; }
+
+.help-pop {
+  position: fixed; z-index: 50;
+  width: max-content; max-width: 340px;
+  padding: 11px 13px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  font-size: 0.78rem; line-height: 1.5;
+}
+.help-pop .hp-title { font-weight: 700; font-size: 0.82rem; margin-bottom: 4px; }
+.help-pop p { margin: 0.45em 0; max-width: none; color: var(--ink-2); }
+.help-pop table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.72rem; width: 100%; }
+.help-pop th {
+  text-align: left; font: 600 0.6rem var(--f-mono);
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  padding: 0 8px 3px 0; border-bottom: 1px solid var(--line-soft);
+}
+.help-pop td { padding: 2px 8px 2px 0; vertical-align: top; color: var(--ink-2); }
+.help-pop td:first-child { font-family: var(--f-mono); white-space: nowrap; color: var(--ink); }
+
+/* VEI row: class and volume on one line, the comparable eruption under it. */
+.derived.vei { flex-wrap: wrap; row-gap: 1px; }
+.derived.vei .ex { flex-basis: 100%; font-size: 0.7rem; color: var(--muted); }
+
+/* On a phone the corner badge runs into the view buttons; the title is in the
+   masthead anyway. */
+@media (max-width: 520px) { .badge { display: none; } }

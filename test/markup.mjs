@@ -10,6 +10,8 @@
 //   node test/markup.mjs
 
 import { readFileSync, readdirSync } from 'node:fs';
+import { HELP } from '../js/help.js';
+import { FIELDS } from '../js/ui.js';
 
 let fail = 0;
 const check = (cond, msg) => { if (!cond) { console.log('  FAIL ' + msg); fail++; } };
@@ -47,6 +49,21 @@ const vsrc = readFileSync('js/vectors.js', 'utf8');
 for (const m of vsrc.matchAll(/id:\s*'(t-[\w-]+)'/g)) {
   check(seen.has(m[1]), `vectors.js declares toggle #${m[1]}, which is not in index.html`);
 }
+
+// --- 4. every numeric field has its slider, text box and hint line ----------
+// ui.js builds these ids by concatenation, which section 2 cannot see.
+for (const F of FIELDS) {
+  for (const pre of ['s-', 'n-', 'h-']) {
+    check(seen.has(pre + F.id), `ui.js field "${F.id}" expects #${pre}${F.id}, which is not in index.html`);
+  }
+}
+console.log(`  ${FIELDS.length} numeric fields, each with slider, text box and hint`);
+
+// --- 5. help buttons and help text match one to one --------------------------
+const helpKeys = [...html.matchAll(/data-help="([^"]+)"/g)].map((m) => m[1]);
+for (const k of helpKeys) check(k in HELP, `a help button asks for "${k}", which js/help.js does not define`);
+for (const k of Object.keys(HELP)) check(helpKeys.includes(k), `js/help.js defines "${k}" but no button uses it`);
+console.log(`  ${helpKeys.length} help buttons, ${Object.keys(HELP).length} entries`);
 
 console.log(fail ? `\n${fail} FAILED` : '\nOK - markup and module lookups agree');
 process.exit(fail ? 1 : 0);

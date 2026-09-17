@@ -52,6 +52,37 @@ npm test
 
 No dependencies to install for any of this.
 
+## Controls
+
+Every numeric control is a slider plus a text box. Click the number, type a
+value, press Enter; Escape abandons the edit and the arrow keys nudge it (with
+Shift for bigger steps). Typed values may go beyond the slider's range — the
+slider pins at its end — and are clamped, with a note, only at physically
+meaningful limits.
+
+The boxes read the forms people actually write numbers in:
+
+| Field | Examples that work |
+| --- | --- |
+| Erupted mass | `2e10`, `2×10¹⁰`, `2*10^10`, `200 Mt`, `1.5 Gt`, `500 t` |
+| Plume height | `9.5`, `9500 m`, `30000 ft` |
+| Grain size | `2` (φ), `φ 2.5`, `250 µm`, `0.5 mm` |
+| Wind direction | `270`, `WSW` |
+| Wind speed | `25`, `40 kt`, `90 km/h` |
+| Density | `1200`, `1.2 g/cm³` |
+| Eruption length | `45` (min), `1.5 h`, `300 s` |
+
+A decimal comma works (`2,5`), and so does a thousands separator (`2,500`).
+
+Controls whose meaning is not obvious outside physical volcanology — φ, sorting,
+Suzuki *A*, directional shear, eddy diffusivity, bulk density, isopachs, the
+Mastin duration and the VEI — have a **?** that explains what the quantity is,
+what it does in this model, and what a sensible value looks like.
+
+The **VEI** readout under erupted mass is the volume-based class of Newhall &
+Self (1982), using the deposit bulk density to turn mass into volume, with a
+comparable historical eruption for each class.
+
 ## What it computes
 
 Deposit mass per unit area is a sum of two-dimensional Gaussians, one per
@@ -202,7 +233,10 @@ js/texture.js           land/sea base, deposit raster, isopachs
 js/particles.js         Lagrangian cloud
 js/vectors.js           roads, rail and the city limit, draped on the DEM
 js/scene.js             three.js, camera, labels
-js/ui.js                sliders and readouts
+js/ui.js                controls, typed values and readouts
+js/parse.js             reads typed quantities and units  (pure, tested)
+js/vei.js               VEI classes and example eruptions  (pure, tested)
+js/help.js              the ? explanations and their popover
 js/main.js              wiring
 data/terrain.png        packed DEM, see below
 data/vectors.json       roads, railways, city limit, in model km

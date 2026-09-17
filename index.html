@@ -15,13 +15,7 @@
 <body>
 <div class="wrap">
 
-<header>
-  <span class="eyebrow">Tephra transport &amp; deposition · GSI elevation model</span>
-  <h1>Sakurajima Ashfall Sandbox</h1>
-  <p class="sub">Set an eruption and a wind field, watch the plume bend and the deposit drape over real terrain.
-  Analytical advection&ndash;diffusion with Reynolds-dependent settling, after Suzuki (1983) and Tephra2.
-  <a href="https://github.com/ArminTimar/ashfall-sandbox#readme">Physics, validation and limitations are in the README</a>.</p>
-</header>
+
 
 <div class="rig">
   <div class="col-view">
@@ -96,6 +90,12 @@
   </div>
 
   <div class="col-ctl">
+    <header class="masthead">
+      <h1>Sakurajima Ashfall Sandbox</h1>
+      <p class="tag">Tephra fall on real terrain. <a href="#about">About</a> ·
+      <a href="https://github.com/ArminTimar/ashfall-sandbox#readme">README</a></p>
+    </header>
+
     <div class="ctl">
       <h3>Scenario</h3>
       <div class="presets">
@@ -104,53 +104,104 @@
         <button class="p" data-preset="taisho" type="button">Taishō 1914 scale</button>
         <button class="p" data-preset="summer" type="button">Wind onto city</button>
       </div>
+      <p class="note typing">Every value can be typed: click a number, enter it, press Enter.
+      Units work too — <code>200 Mt</code>, <code>30000 ft</code>, <code>250 µm</code>, <code>40 kt</code>, <code>WSW</code>.</p>
     </div>
 
     <div class="ctl">
       <h3>Eruption source</h3>
       <div class="field">
-        <div class="top"><label for="s-h">Plume height above vent</label><span class="val" id="v-h"></span></div>
-        <input type="range" id="s-h" min="1" max="25" step="0.5">
+        <div class="top">
+        <label for="n-h">Plume height above vent</label>
+        <button class="help" type="button" data-help="height" aria-label="About plume height above vent">?</button>
+        <span class="num-wrap"><input class="num" id="n-h" type="text" autocomplete="off" spellcheck="false"><span class="unit">km</span></span>
+        </div>
+        <input type="range" id="s-h" min="1" max="25" step="0.5" aria-label="Plume height above vent">
+      <div class="hint" id="h-h"></div>
       </div>
       <div class="field">
-        <div class="top"><label for="s-m">Erupted mass</label><span class="val" id="v-m"></span></div>
-        <input type="range" id="s-m" min="0" max="100" step="1">
+        <div class="top">
+        <label for="n-m">Erupted mass</label>
+        <span class="num-wrap"><input class="num wide" id="n-m" type="text" autocomplete="off" spellcheck="false"><span class="unit">kg</span></span>
+        </div>
+        <input type="range" id="s-m" min="0" max="100" step="0.5" aria-label="Erupted mass">
+      <div class="hint" id="h-m"></div>
+      </div>
+      <div class="derived vei" id="d-vei">
+        <span class="dk">VEI <button class="help" type="button" data-help="vei" aria-label="About the Volcanic Explosivity Index">?</button></span>
+        <span class="dv" id="v-vei">–</span>
+        <span class="ex" id="v-vei-ex"></span>
       </div>
       <div class="derived" id="d-dur">
-        <span class="dk">Implied duration <em>Mastin</em></span>
+        <span class="dk">Implied duration <em>Mastin</em> <button class="help" type="button" data-help="duration" aria-label="About the implied duration">?</button></span>
         <span class="dv" id="v-dur">–</span>
       </div>
       <div class="field">
-        <div class="top"><label for="s-phi">Median grain size</label><span class="val" id="v-phi"></span></div>
-        <input type="range" id="s-phi" min="-2" max="5" step="0.1">
+        <div class="top">
+        <label for="n-phi">Median grain size</label>
+        <button class="help" type="button" data-help="phi" aria-label="About median grain size">?</button>
+        <span class="num-wrap"><span class="unit pre">φ</span><input class="num" id="n-phi" type="text" autocomplete="off" spellcheck="false"></span>
+        </div>
+        <input type="range" id="s-phi" min="-2" max="5" step="0.1" aria-label="Median grain size">
+      <div class="hint" id="h-phi"></div>
       </div>
       <div class="field">
-        <div class="top"><label for="s-sig">Sorting (σφ)</label><span class="val" id="v-sig"></span></div>
-        <input type="range" id="s-sig" min="0.4" max="3" step="0.1">
+        <div class="top">
+        <label for="n-sig">Sorting</label>
+        <button class="help" type="button" data-help="sigma" aria-label="About sorting">?</button>
+        <span class="num-wrap"><span class="unit pre">σφ</span><input class="num" id="n-sig" type="text" autocomplete="off" spellcheck="false"></span>
+        </div>
+        <input type="range" id="s-sig" min="0.4" max="3" step="0.1" aria-label="Sorting">
+      <div class="hint" id="h-sig"></div>
       </div>
       <div class="field">
-        <div class="top"><label for="s-suz">Column mass peak</label><span class="val" id="v-suz"></span></div>
-        <input type="range" id="s-suz" min="1" max="12" step="0.5">
+        <div class="top">
+        <label for="n-suz">Column mass peak</label>
+        <button class="help" type="button" data-help="suzuki" aria-label="About column mass peak">?</button>
+        <span class="num-wrap"><span class="unit pre">A</span><input class="num" id="n-suz" type="text" autocomplete="off" spellcheck="false"></span>
+        </div>
+        <input type="range" id="s-suz" min="1" max="12" step="0.5" aria-label="Column mass peak">
+      <div class="hint" id="h-suz"></div>
       </div>
     </div>
 
     <div class="ctl">
       <h3>Wind field</h3>
       <div class="field">
-        <div class="top"><label for="s-dir">Wind from</label><span class="val" id="v-dir"></span></div>
-        <input type="range" id="s-dir" min="0" max="359" step="1">
+        <div class="top">
+        <label for="n-dir">Wind from</label>
+        <button class="help" type="button" data-help="dir" aria-label="About wind from">?</button>
+        <span class="num-wrap"><input class="num" id="n-dir" type="text" autocomplete="off" spellcheck="false"><span class="unit">°</span></span>
+        </div>
+        <input type="range" id="s-dir" min="0" max="359" step="1" aria-label="Wind from">
+      <div class="hint" id="h-dir"></div>
       </div>
       <div class="field">
-        <div class="top"><label for="s-spd">Speed at 2 km</label><span class="val" id="v-spd"></span></div>
-        <input type="range" id="s-spd" min="0" max="40" step="1">
+        <div class="top">
+        <label for="n-spd">Speed at 2 km</label>
+        <button class="help" type="button" data-help="wind2" aria-label="About speed at 2 km">?</button>
+        <span class="num-wrap"><input class="num" id="n-spd" type="text" autocomplete="off" spellcheck="false"><span class="unit">m/s</span></span>
+        </div>
+        <input type="range" id="s-spd" min="0" max="40" step="1" aria-label="Speed at 2 km">
+      <div class="hint" id="h-spd"></div>
       </div>
       <div class="field">
-        <div class="top"><label for="s-top">Speed at 12 km</label><span class="val" id="v-top"></span></div>
-        <input type="range" id="s-top" min="0" max="80" step="1">
+        <div class="top">
+        <label for="n-top">Speed at 12 km</label>
+        <button class="help" type="button" data-help="wind12" aria-label="About speed at 12 km">?</button>
+        <span class="num-wrap"><input class="num" id="n-top" type="text" autocomplete="off" spellcheck="false"><span class="unit">m/s</span></span>
+        </div>
+        <input type="range" id="s-top" min="0" max="80" step="1" aria-label="Speed at 12 km">
+      <div class="hint" id="h-top"></div>
       </div>
       <div class="field">
-        <div class="top"><label for="s-shr">Directional shear</label><span class="val" id="v-shr"></span></div>
-        <input type="range" id="s-shr" min="-120" max="120" step="5">
+        <div class="top">
+        <label for="n-shr">Directional shear</label>
+        <button class="help" type="button" data-help="shear" aria-label="About directional shear">?</button>
+        <span class="num-wrap"><input class="num" id="n-shr" type="text" autocomplete="off" spellcheck="false"><span class="unit">°</span></span>
+        </div>
+        <input type="range" id="s-shr" min="-120" max="120" step="5" aria-label="Directional shear">
+      <div class="hint" id="h-shr"></div>
       </div>
     </div>
 
@@ -162,12 +213,20 @@
       </div>
       <p class="note" id="mode-note"></p>
       <div class="field">
-        <div class="top"><label for="s-rate">Playback speed</label><span class="val" id="v-rate"></span></div>
-        <input type="range" id="s-rate" min="1" max="300" step="1">
+        <div class="top">
+        <label for="n-rate">Playback speed</label>
+        <span class="num-wrap"><span class="unit pre">×</span><input class="num" id="n-rate" type="text" autocomplete="off" spellcheck="false"></span>
+        </div>
+        <input type="range" id="s-rate" min="1" max="300" step="1" aria-label="Playback speed">
+      <div class="hint" id="h-rate"></div>
       </div>
       <div class="field erupt-only">
-        <div class="top"><label for="s-elen">Eruption length</label><span class="val" id="v-elen"></span></div>
-        <input type="range" id="s-elen" min="60" max="7200" step="60">
+        <div class="top">
+        <label for="n-elen">Eruption length</label>
+        <span class="num-wrap"><input class="num" id="n-elen" type="text" autocomplete="off" spellcheck="false"><span class="unit">min</span></span>
+        </div>
+        <input type="range" id="s-elen" min="1" max="120" step="1" aria-label="Eruption length">
+      <div class="hint" id="h-elen"></div>
       </div>
       <div class="erupt-only replay">
         <button class="p" id="b-replay" type="button">Replay eruption</button>
@@ -178,20 +237,35 @@
     <div class="ctl">
       <h3>View &amp; deposit</h3>
       <div class="field">
-        <div class="top"><label for="s-ex">Vertical exaggeration</label><span class="val" id="v-ex"></span></div>
-        <input type="range" id="s-ex" min="1" max="12" step="0.5">
+        <div class="top">
+        <label for="n-ex">Vertical exaggeration</label>
+        <span class="num-wrap"><span class="unit pre">×</span><input class="num" id="n-ex" type="text" autocomplete="off" spellcheck="false"></span>
+        </div>
+        <input type="range" id="s-ex" min="1" max="12" step="0.5" aria-label="Vertical exaggeration">
+      <div class="hint" id="h-ex"></div>
       </div>
       <div class="field">
-        <div class="top"><label for="s-k">Eddy diffusivity K</label><span class="val" id="v-k"></span></div>
-        <input type="range" id="s-k" min="100" max="20000" step="100">
+        <div class="top">
+        <label for="n-k">Eddy diffusivity</label>
+        <button class="help" type="button" data-help="K" aria-label="About eddy diffusivity">?</button>
+        <span class="num-wrap"><input class="num wide" id="n-k" type="text" autocomplete="off" spellcheck="false"><span class="unit">m²/s</span></span>
+        </div>
+        <input type="range" id="s-k" min="100" max="20000" step="100" aria-label="Eddy diffusivity">
+      <div class="hint" id="h-k"></div>
       </div>
       <div class="field">
-        <div class="top"><label for="s-rho">Deposit bulk density</label><span class="val" id="v-rho"></span></div>
-        <input type="range" id="s-rho" min="400" max="2000" step="50">
+        <div class="top">
+        <label for="n-rho">Deposit bulk density</label>
+        <button class="help" type="button" data-help="rho" aria-label="About deposit bulk density">?</button>
+        <span class="num-wrap"><input class="num wide" id="n-rho" type="text" autocomplete="off" spellcheck="false"><span class="unit">kg/m³</span></span>
+        </div>
+        <input type="range" id="s-rho" min="400" max="2000" step="50" aria-label="Deposit bulk density">
+      <div class="hint" id="h-rho"></div>
       </div>
       <div class="toggles">
         <label><input type="checkbox" id="t-part" checked> Plume</label>
         <label><input type="checkbox" id="t-cont" checked> Isopachs</label>
+        <button class="help" type="button" data-help="isopach" aria-label="About isopachs">?</button>
         <label><input type="checkbox" id="t-spin"> Rotate</label>
       </div>
       <div class="toggles map">
@@ -202,6 +276,18 @@
     </div>
   </div>
 </div>
+
+<section class="about" id="about">
+  <span class="eyebrow">Tephra transport &amp; deposition · GSI elevation model</span>
+  <h2>About this sandbox</h2>
+  <p>Set an eruption and a wind field, watch the plume bend and the deposit drape over real terrain.
+  The deposit is an analytical advection&ndash;diffusion solution with Reynolds-dependent settling, after
+  Suzuki (1983) and the Tephra2 formulation; the falling particles are a Lagrangian view of the same
+  equations, not decoration.</p>
+  <p>It is a teaching and exploration tool, not a forecast. The physics, the validation against an
+  independent particle model, and the limitations that matter if you compare it with a real deposit are
+  in the <a href="https://github.com/ArminTimar/ashfall-sandbox#readme">README</a>.</p>
+</section>
 
 <footer>
   <p>Elevation: GSI 標高タイル (Geospatial Information Authority of Japan), zoom 12, resampled.

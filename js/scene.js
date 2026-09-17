@@ -87,6 +87,10 @@ export function initScene(hostEl) {
   bindControls();
   buildLabels();
   resize();
+  // The scene's height comes from the flex layout, which changes without a
+  // window resize — web fonts arriving, the readout row reflowing — so watch
+  // the element itself or the canvas ends up stretched.
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(host);
 }
 
 export function applyExaggeration() {
