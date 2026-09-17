@@ -73,7 +73,7 @@ export function parseWith(raw, units) {
   const conv = units[q.unit];
   if (!conv) {
     const known = Object.keys(units).filter(Boolean);
-    return { error: `unknown unit "${q.unit}"` + (known.length ? ` — try ${known.slice(0, 4).join(', ')}` : '') };
+    return { error: `unknown unit "${q.unit}"` + (known.length ? `. Try ${known.slice(0, 4).join(', ')}` : '') };
   }
   const v = conv(q.value);
   if (!Number.isFinite(v)) return { error: 'out of range' };

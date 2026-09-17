@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sakurajima Ashfall Sandbox</title>
-<meta name="description" content="Interactive tephra advection-diffusion model for Sakurajima volcano on real GSI terrain.">
+<meta name="description" content="Interactive ash fall model for Sakurajima volcano on real GSI terrain.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -32,6 +32,12 @@
           <div class="cap">Deposit thickness</div>
           <div class="bar"></div>
           <div class="lbl"><span>0.001 mm</span><span>1</span><span>1000+</span></div>
+        </div>
+        <div class="legend" aria-hidden="true">
+          <span>City over 50,000 <i class="t1"></i></span>
+          <span>City or town <i class="t2"></i></span>
+          <span>District <i class="t3"></i></span>
+          <span>Volcano <i class="vol"></i></span>
         </div>
         <div id="loading">Loading terrain&hellip;</div>
         <!-- Classic script, so it still runs when the module below is blocked.
@@ -104,8 +110,8 @@
         <button class="p" data-preset="taisho" type="button">Taishō 1914 scale</button>
         <button class="p" data-preset="summer" type="button">Wind onto city</button>
       </div>
-      <p class="note typing">Every value can be typed: click a number, enter it, press Enter.
-      Units work too — <code>200 Mt</code>, <code>30000 ft</code>, <code>250 µm</code>, <code>40 kt</code>, <code>WSW</code>.</p>
+      <p class="note typing">You can type any value. Click a number, enter a new one and press Enter.
+      Units work too, for example <code>200 Mt</code>, <code>30000 ft</code>, <code>250 µm</code>, <code>40 kt</code> or <code>WSW</code>.</p>
     </div>
 
     <div class="ctl">
@@ -272,32 +278,38 @@
         <label><input type="checkbox" id="t-road" checked> <i class="sw road"></i>Roads</label>
         <label><input type="checkbox" id="t-rail" checked> <i class="sw rail"></i>Rail</label>
         <label><input type="checkbox" id="t-city" checked> <i class="sw city"></i>City limit</label>
+        <label><input type="checkbox" id="t-places" checked> Place names</label>
       </div>
     </div>
+
+    <section class="about" id="about">
+      <span class="eyebrow">Tephra transport and deposition · GSI elevation model</span>
+      <h2>About this sandbox</h2>
+      <p>Set an eruption and a wind field, then watch the plume bend and the ash settle over real
+      terrain. The deposit on the map is an analytical advection and diffusion solution with settling
+      speeds that depend on grain size, following Suzuki (1983) and the Tephra2 model. The moving
+      particles follow the same equations one grain at a time.</p>
+      <p>It is meant for teaching and exploring. It does not forecast real eruptions. The
+      <a href="https://github.com/ArminTimar/ashfall-sandbox#readme">README</a> describes the physics,
+      how the particles were checked against the deposit, and the limits to keep in mind when comparing
+      with a real deposit.</p>
+    </section>
+
+    <footer>
+      <p>Elevation: GSI 標高タイル (Geospatial Information Authority of Japan), zoom 12, resampled.
+      Deposit model after Suzuki (1983) and the Tephra2 model of Connor and colleagues. Settling
+      velocity after Bonadonna and colleagues (1998). Plume height to eruption rate after Mastin and
+      colleagues (2009). Damage thresholds after Blong and colleagues (2017).</p>
+      <p>Roads, railways, the Kagoshima city limit and most place names are
+      <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>,
+      licensed <a href="https://opendatacommons.org/licenses/odbl/">ODbL 1.0</a>. Some smaller place
+      names are from <a href="https://www.geonames.org/">GeoNames</a>, licensed
+      <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</p>
+    </footer>
   </div>
 </div>
 
-<section class="about" id="about">
-  <span class="eyebrow">Tephra transport &amp; deposition · GSI elevation model</span>
-  <h2>About this sandbox</h2>
-  <p>Set an eruption and a wind field, watch the plume bend and the deposit drape over real terrain.
-  The deposit is an analytical advection&ndash;diffusion solution with Reynolds-dependent settling, after
-  Suzuki (1983) and the Tephra2 formulation; the falling particles are a Lagrangian view of the same
-  equations, not decoration.</p>
-  <p>It is a teaching and exploration tool, not a forecast. The physics, the validation against an
-  independent particle model, and the limitations that matter if you compare it with a real deposit are
-  in the <a href="https://github.com/ArminTimar/ashfall-sandbox#readme">README</a>.</p>
-</section>
 
-<footer>
-  <p>Elevation: GSI 標高タイル (Geospatial Information Authority of Japan), zoom 12, resampled.
-  Model after Suzuki (1983) and the Tephra2 formulation of Connor and colleagues; settling velocity after
-  Bonadonna and colleagues (1998); plume height to eruption rate after Mastin and colleagues (2009);
-  damage thresholds after Blong and colleagues (2017).</p>
-  <p>Roads, railways and the Kagoshima city limit are
-  <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>,
-  licensed <a href="https://opendatacommons.org/licenses/odbl/">ODbL 1.0</a>.</p>
-</footer>
 
 </div>
 <script type="module" src="js/main.js"></script>

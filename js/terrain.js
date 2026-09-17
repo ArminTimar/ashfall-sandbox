@@ -1,10 +1,10 @@
 // Loads the packed elevation model.
 //
-// data/terrain.png encodes a 320x320 grid, north-up:
+// data/terrain.png encodes a 512x512 grid, north-up:
 //   R,G  elevation in decimetres, big-endian  (elev_m = ((R << 8) | G) / 10)
 //   B    land fraction, 0 = sea, 255 = land
 // Built by tools/build_terrain.py from GSI 標高タイル (Geospatial Information
-// Authority of Japan), zoom 12, 36 tiles, resampled.
+// Authority of Japan), zoom 12, 144 tiles, resampled.
 
 import { N, XW, YS, KMW, KMH } from './params.js';
 

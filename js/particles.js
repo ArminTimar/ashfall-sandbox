@@ -1,234 +1,328 @@
 // Lagrangian view of the same model the field solution solves analytically.
 //
-// Each particle carries a real grain size, rises through the column to its own
-// release height, then falls using the same settling velocity, the same wind
-// and the same diffusion as physics.compute(). The random walk's variance grows
-// at dV/dt = 2K, which is the derivative of the field's sigma^2, so the cloud
-// spreads at the same rate as the analytical answer.
+// Each particle carries a real grain size and a release height drawn from the
+// same Suzuki profile the deposit uses. It rides up the eruption column,
+// leaves it gradually around its release height, and then falls with the same
+// settling velocity, wind and diffusion as physics.compute().
 //
-// Two display modes, because they answer different questions:
+// Leaving the column is continuous. Each particle has a support fraction S
+// that starts at 1 in the column and decays to 0 across a detrainment layer
+// below its release height:
+//
+//   vertical velocity    (W(z) + vs) * S - vs
+//   horizontal velocity  wind * (1 - S * (1 - bend(z)))
+//   turbulent spread     random walk with variance 2K * (1 - S) per second
+//
+// With S = 1 a particle moves with the column gas (updraft W, part of the
+// wind). With S = 0 it settles at vs through the full wind and diffuses, which
+// is exactly the fall the analytical deposit assumes. In between it slows,
+// arcs over and starts to fall, the way ash leaves the margins of a real
+// plume. S only ever decreases, so nothing is caught and lifted again.
+//
+// Two display modes:
 //
 //   'steady'    the eruption has been running long enough for the cloud to
-//               reach a steady state. Particles are recycled forever and the
-//               picture does not change in character over time. This is the one
-//               that matches the deposit field, which is itself a steady-state
-//               solution.
+//               reach a steady state. Particles are recycled forever. This is
+//               the one that matches the deposit field.
 //
-//   'eruption'  a single eruption of a set length, played at a set speed.
-//               Particles are released over that window and then nothing more
-//               is emitted, so the column dies back, the cloud drifts away and
-//               the sky empties. This is a time-domain view of the same
-//               physics; it does not feed the deposit field.
+//   'eruption'  one eruption of a set length, played at a set speed. Particles
+//               are released over that window and then emission stops. It does
+//               not feed the deposit field.
 
 import { XW, XE, YS, YN, VENT_Z, P } from './params.js';
-import { airRho, vSettle, windAt, plumeTau, axisVar, gauss } from './physics.js';
+import { airRho, vSettle, windAt, gauss } from './physics.js';
 import { elevAt } from './terrain.js';
 
-export const NP = 1800;
-// Mutated in place, never reassigned — see the note on `stats` in physics.js.
+// The number of particles scales with erupted mass: 4.5 times as many for
+// every tenfold increase, between these limits. The buffers in scene.js are
+// sized for the maximum.
+export const NP_MIN = 120;
+export const NP_MAX = 6000;
+
+export function particleBudget(logM = P.logM) {
+  const n = 150 * Math.pow(10, 0.22 * (logM - 5));
+  return Math.round(Math.max(NP_MIN, Math.min(NP_MAX, n)));
+}
+
+// Mutated in place, never reassigned. See the note on `stats` in physics.js.
 export const parts = [];
 
 // Eruption-mode state, also mutated in place.
-export const clock = { t: 0, released: 0, active: 0, done: false };
+export const clock = { t: 0, released: 0, active: 0, done: false, budget: 0 };
 
 const PHI_MIN = -5, PHI_MAX = 5;
 
-// Rise law, shared by the integrator and the closed-form rise time below so the
-// two cannot drift apart: dz/dt = V0 * (A - B * s), where s is the fraction of
-// the climb completed, so a particle decelerates towards its release height
-// rather than stopping dead.
-const RISE_V0 = 9, RISE_A = 1.15, RISE_B = 0.75;
+// ---------------------------------------------------------------------------
+// The column
+// ---------------------------------------------------------------------------
 
-function newPart() {
-  let phi = P.phi + P.sig * (Math.random() + Math.random() + Math.random() - 1.5) * 1.4;
+const col = {
+  key: '', top: VENT_Z, W0: 0, kappa: 0, delta: 0, hHeld: 3,
+  cdf: new Float64Array(201)
+};
+
+/**
+ * Column properties that depend only on the parameters, rebuilt when they
+ * change.
+ *
+ * W0 is the updraft speed low in the column. It scales with the square root of
+ * plume height: about 34 m/s for a 5 km plume and 50 m/s for 11 km. Those
+ * plumes then take roughly 3 and 5 minutes to reach their tops, which is the
+ * right order for filmed Sakurajima explosions and for larger eruptions.
+ *
+ * kappa sets how much of the wind the column gas has picked up by the top. A
+ * plume with an updraft much faster than the wind stays nearly upright, and
+ * one in a strong wind is bent over (Bonadonna & Phillips, 2003).
+ */
+function column() {
+  const key = `${P.H}|${P.suz}|${P.spd}|${P.top}|${P.dir}|${P.shear}`;
+  if (key === col.key) return col;
+  col.key = key;
+  col.top = VENT_Z + P.H * 1000;
+  col.W0 = 15 * Math.sqrt(Math.max(P.H, 0.2));
+  const wt = windAt(col.top);
+  col.kappa = Math.max(0.25, Math.min(1, 0.25 + 1.2 * Math.hypot(wt.u, wt.v) / col.W0));
+  col.delta = Math.max(0.25 * (col.top - VENT_Z), 400);
+  // Time step inside the column: short enough to cross the detrainment layer
+  // in about four steps at full updraft.
+  col.hHeld = Math.max(2, Math.min(12, col.delta / (4 * col.W0)));
+
+  // Cumulative Suzuki profile, (1 - zeta) exp(A (zeta - 1)), the same shape
+  // physics.heightBins() uses for the deposit.
+  const c = col.cdf, M = c.length - 1;
+  c[0] = 0;
+  for (let i = 1; i <= M; i++) {
+    const zeta = (i - 0.5) / M;
+    c[i] = c[i - 1] + (1 - zeta) * Math.exp(P.suz * (zeta - 1));
+  }
+  for (let i = 1; i <= M; i++) c[i] /= c[M];
+  return col;
+}
+
+function sampleRelease(C) {
+  const u = Math.random(), c = C.cdf, M = c.length - 1;
+  let lo = 0, hi = M;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (c[mid] < u) lo = mid; else hi = mid; }
+  const f = c[hi] > c[lo] ? (u - c[lo]) / (c[hi] - c[lo]) : 0;
+  return VENT_Z + (C.top - VENT_Z) * ((lo + f) / M);
+}
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/**
+ * Column updraft at height z, m/s. It slows with height, keeps a fifth of its
+ * low-level speed up to the plume top so particles released there still get
+ * there, and dies away within a few hundred metres above the top.
+ */
+function updraft(C, z) {
+  const zeta = Math.max((z - VENT_Z) / Math.max(C.top - VENT_Z, 1), 0);
+  if (zeta <= 1) return C.W0 * (0.2 + 0.8 * Math.sqrt(1 - zeta));
+  return C.W0 * 0.2 * Math.exp(-(zeta - 1) / 0.05);
+}
+
+/** Fraction of the wind the column gas has picked up at height z. */
+function bend(C, z) {
+  const zeta = clamp01((z - VENT_Z) / Math.max(C.top - VENT_Z, 1));
+  return Math.min(1, C.kappa * Math.sqrt(zeta));
+}
+
+/**
+ * Plume radius at height z, m. 0.08 of the height climbed matches the spread
+ * the deposit model gives the cloud at release: a per-axis variance of
+ * 2K * plumeTau = 0.0064 h^2, whatever K is.
+ */
+function plumeRadius(z) {
+  return 80 + 0.08 * Math.max(z - VENT_Z, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Particles
+// ---------------------------------------------------------------------------
+
+function newPart(C) {
+  let phi = P.phi + P.sig * gauss();
   phi = Math.max(PHI_MIN, Math.min(PHI_MAX, phi));
-  const Htop = VENT_Z + P.H * 1000;
-  const rel = VENT_Z + (Htop - VENT_Z) * (1 - Math.pow(Math.random(), 1 / Math.max(P.suz * 0.35, 0.6)));
+  const gx = gauss(), gy = gauss();
   return {
-    dx: 0, dy: 0, z: VENT_Z, rel, rising: true,
-    ang: Math.random() * Math.PI * 2,
-    rad: Math.sqrt(Math.random()),
+    x: 0, y: 0, z: VENT_Z,
+    rel: sampleRelease(C),
+    S: 1,                     // support by the column: 1 inside it, 0 falling freely
+    rs: plumeRadius(VENT_Z),  // widest plume radius reached so far
+    top: VENT_Z,              // highest point reached so far
+    gx, gy,                   // fixed place in the plume cross-section
+    // The updraft is fastest on the axis and slower towards the edge.
+    wf: (0.6 + 0.4 * Math.exp(-(gx * gx + gy * gy) / 2)) * (0.9 + 0.2 * Math.random()),
     d: Math.pow(2, -phi) / 1000,
     rp: 1200 + 1200 * ((phi - PHI_MIN) / (PHI_MAX - PHI_MIN)),
-    phi
+    phi,
+    rising: true
   };
 }
 
-/**
- * Seconds to climb from the vent to `rel`, in closed form.
- *
- * Integrating dt = dz / (V0 * (A - B*s)) over the whole climb gives
- * (Z / (V0*B)) * ln(A / (A - B)), with Z the height gained.
- */
-function riseTime(rel) {
-  const Z = Math.max(rel - VENT_Z, 1);
-  return (Z / (RISE_V0 * RISE_B)) * Math.log(RISE_A / (RISE_A - RISE_B));
-}
-
-/** Fraction of the climb completed after a fraction `u` of the rise time. */
-function riseFrac(u) {
-  return (RISE_A / RISE_B) * (1 - Math.pow((RISE_A - RISE_B) / RISE_A, u));
-}
-
-/** Column radius grows with height, roughly 13% of the rise. */
-function colRadius(p) {
-  return (0.13 * (p.z - VENT_Z) + 130) * p.rad;
-}
-
 export function partXY(p) {
-  if (!p.rising) return [p.dx, p.dy];
-  const r = colRadius(p);
-  return [p.dx + Math.cos(p.ang) * r, p.dy + Math.sin(p.ang) * r];
+  return [p.x + p.gx * p.rs, p.y + p.gy * p.rs];
 }
-
-/** Walk a particle up its rise to fraction `s`, accumulating wind drift. */
-function windUpRise(p, s) {
-  const Z = p.rel - VENT_Z;
-  const STEPS = 12;
-  let prev = 0;
-  for (let k = 1; k <= STEPS; k++) {
-    const su = (s * k) / STEPS;
-    const mid = (prev + su) / 2;
-    // Slice duration from the same rise law the integrator uses.
-    const dt = (Z * (su - prev)) / (RISE_V0 * (RISE_A - RISE_B * mid));
-    const w = windAt(VENT_Z + Z * mid);
-    const f = mid * mid;                    // the integrator's sp*sp weighting
-    p.dx += w.u * dt * f;
-    p.dy += w.v * dt * f;
-    prev = su;
-  }
-  p.z = VENT_Z + Z * s;
-}
-
-// Scratch trajectory for the seeding walk below, reused across particles so
-// re-seeding 1800 of them allocates nothing.
-const _tt = [], _tx = [], _ty = [], _tz = [];
-let _tn = 0;
-const MAX_FALL_STEPS = 4000;
 
 /**
- * Walk a particle's entire fall once, recording the trajectory, and return the
- * time it spends inside the domain.
- *
- * Diffusion is included because for fine ash it is the thing that ends the
- * particle's visible life: at phi 4 the settling velocity is a few tens of cm/s
- * and a 100 m step lasts minutes, so the random walk moves it kilometres per
- * step and carries it out of a 50 km box long before it reaches the ground.
- * Leaving it out made the seeding think fine ash lingers, and a re-seed then
- * emptied a column that the running cloud kept full.
+ * Advance one particle by a single step of at most hMax seconds and return the
+ * step taken. `coarse` allows longer steps, for the seeding walk.
  */
-function recordFall(rel, d, rp, ox, oy) {
-  let z = rel, acc = 0, dx = ox, dy = oy, k = 0;
-  _tt[0] = 0; _tx[0] = dx; _ty[0] = dy; _tz[0] = z;
-  while (z > 0 && k < MAX_FALL_STEPS) {
-    let vs = vSettle(d, rp, airRho(z));
-    if (!(vs > 0.0001)) vs = 0.0001;
-    const w = windAt(z);
-    const wspd = Math.hypot(w.u, w.v);
-    // Step in time, bounding both the drop and the sideways move. Stepping a
-    // fixed 100 m of altitude instead looks reasonable until the wind is
-    // strong and the particle is slow: at 48 m/s aloft a 100 m drop can take
-    // long enough to carry it three to five kilometres sideways, so the walk
-    // leaps clean over the edge of a 50 km domain and counts the whole
-    // overshoot as time spent inside it.
-    let dt = Math.min(100 / vs, 400 / Math.max(wspd, 0.5), 120);
-    let landing = false;
-    if (vs * dt >= z) { dt = z / vs; landing = true; }
-    const sw = Math.sqrt(2 * P.K * dt);
-    acc += dt;
-    dx += w.u * dt + gauss() * sw;
-    dy += w.v * dt + gauss() * sw;
-    // Set exactly zero on the landing step: z - vs * (z / vs) can round to a
-    // positive denormal, which would walk on to the step cap in subnormal
-    // arithmetic instead of stopping.
-    z = landing ? 0 : z - vs * dt;
+function stepOnce(C, p, hMax, coarse) {
+  let vs = vSettle(p.d, p.rp, airRho(Math.max(p.z, 0)));
+  if (!(vs > 1e-4)) vs = 1e-4;
+  const held = p.S > 0;
+
+  let h;
+  if (held) h = Math.min(hMax, coarse ? 2 * C.hHeld : C.hHeld);
+  else h = Math.min(hMax, coarse ? 150 : 60, (coarse ? 400 : 250) / vs);
+
+  let vz, carry;
+  if (held) {
+    vz = (updraft(C, p.z) * p.wf + vs) * p.S - vs;
+    carry = 1 - p.S * (1 - bend(C, p.z));
+  } else {
+    vz = -vs;
+    carry = 1;
+  }
+
+  // Wind at the middle of the step, as physics.fallPath samples it.
+  const w = windAt(Math.max(p.z + (vz * h) / 2, 0));
+  p.x += w.u * carry * h;
+  p.y += w.v * carry * h;
+  const free = 1 - p.S;
+  if (free > 0) {
+    const sw = Math.sqrt(2 * P.K * h * free);
+    p.x += gauss() * sw;
+    p.y += gauss() * sw;
+  }
+  p.z += vz * h;
+
+  if (held) {
+    p.rs = Math.max(p.rs, plumeRadius(p.z));
+    p.top = Math.max(p.top, p.z);
+    // Detrainment: no loss below the layer, rising smoothly to a fast loss at
+    // the release height and above it. The rate follows the highest point the
+    // particle has reached, so a particle that starts to let go and then sinks
+    // below the layer keeps letting go. With the current height instead, it
+    // kept part of its support for the rest of its life and drifted for tens
+    // of kilometres half-carried by a column it had left.
+    const t = clamp01((p.top - (p.rel - C.delta)) / C.delta);
+    const k = (t * t * (3 - 2 * t) * 2 * Math.max(updraft(C, p.rel), 0.2 * C.W0)) / C.delta;
+    p.S *= Math.exp(-k * h);
+    if (p.S < 0.02) p.S = 0;
+  }
+  p.rising = p.S > 0.5;
+  return h;
+}
+
+function outside(p) {
+  const xy = partXY(p);
+  const xk = xy[0] / 1000, yk = xy[1] / 1000;
+  return xk < XW || xk > XE || yk < YS || yk > YN || p.z <= elevAt(xk, yk);
+}
+
+// Traced lives for seeding, stored end to end in flat buffers that are reused
+// between re-seeds.
+const TCAP = 400000;
+const TT = new Float64Array(TCAP), TX = new Float64Array(TCAP), TY = new Float64Array(TCAP);
+const TZ = new Float32Array(TCAP), TS = new Float32Array(TCAP), TRS = new Float32Array(TCAP);
+const TTOP = new Float32Array(TCAP);
+const MAX_TRACE = 3000;
+const POOL = 1500;
+
+/**
+ * Walk a copy of a fresh particle through its whole life, from the vent until
+ * it lands or leaves the domain, writing it into the buffers from index `at`.
+ * Returns the number of points written, or 0 if the buffers are full.
+ */
+function trace(C, p, at) {
+  const q = Object.assign({}, p);
+  let t = 0, k = 0;
+  const put = (i) => {
+    TT[i] = t; TX[i] = q.x; TY[i] = q.y; TZ[i] = q.z; TS[i] = q.S; TRS[i] = q.rs; TTOP[i] = q.top;
+  };
+  if (at + 2 > TCAP) return 0;
+  put(at);
+  while (k < MAX_TRACE && at + k + 1 < TCAP) {
+    t += stepOnce(C, q, Infinity, true);
     k++;
-    _tt[k] = acc; _tx[k] = dx; _ty[k] = dy; _tz[k] = Math.max(z, 1);
-    const xk = dx / 1000, yk = dy / 1000;
-    // Same exit test stepParticles uses.
-    if (xk < XW || xk > XE || yk < YS || yk > YN || z <= elevAt(xk, yk)) break;
+    put(at + k);
+    if (outside(q)) break;
   }
-  _tn = k + 1;
-  return acc;
-}
-
-/** Put p at time `want` along the trajectory recorded by the last recordFall. */
-function sampleFall(p, want) {
-  let i = 1;
-  while (i < _tn - 1 && _tt[i] < want) i++;
-  const t0 = _tt[i - 1], t1 = _tt[i];
-  const f = t1 > t0 ? Math.max(0, Math.min(1, (want - t0) / (t1 - t0))) : 0;
-  p.dx = _tx[i - 1] + (_tx[i] - _tx[i - 1]) * f;
-  p.dy = _ty[i - 1] + (_ty[i] - _ty[i - 1]) * f;
-  p.z = Math.max(_tz[i - 1] + (_tz[i] - _tz[i - 1]) * f, 1);
+  return k + 1;
 }
 
 /**
- * Place one particle where a steady-state cloud would have it.
+ * Fill the steady cloud.
  *
- * This is what a slider drag calls, once per particle, many times a second, so
- * it has to land on the same distribution the running cloud is already in.
- * Where it did not, you saw a burst.
+ * In a steady state the number of particles at a given stage of life is the
+ * release rate times the time spent in that stage. Two things follow. Within
+ * one particle's life, the place to put it is at a uniformly random time. And
+ * across particles, a long-lived kind (fine ash drifting for an hour) must be
+ * picked more often than a short-lived one (a lapillus that lands in minutes),
+ * in proportion to its lifetime. Picking every traced particle once, as an
+ * earlier version did, over-represents the short lives, which crowds the
+ * sky near the column.
  *
- * Two things were wrong before. The split between rising and falling was a flat
- * 90/10, when it has to be the ratio of the time spent in each phase — in a
- * steady state the population of a phase is its residence time times the
- * release rate, and measured against the running cloud the true rising share
- * runs from about a fifth for ash to about half for lapilli, which fall fast
- * enough to still be climbing. More visibly, the particles that were put in the
- * column were given dx = dy = 0, parking all of them within one column radius
- * of the vent axis — under 800 m for a 5 km plume — when the running cloud has
- * them drifted 2 to 4 km downwind. So every re-seed collapsed the column into a
- * bright, tight blob at the vent that then smeared back out over a second or
- * two. That collapse is the flash, and it fired on every slider movement.
+ * So a pool of lives is traced, and the cloud is drawn from the pool with
+ * probability proportional to lifetime. Tracing is most of the cost of a
+ * re-seed, which runs on every slider movement, so the pool stops at 1,500 and
+ * large clouds reuse lives. Each reuse gets its own random time along the
+ * life and its own place in the plume cross-section.
  */
-function placeSteady(p) {
-  const tr = riseTime(p.rel);
-
-  // Where the particle enters its fall. Three pieces, in the order
-  // stepParticles applies them: the drift it picked up on the way up, the rim
-  // of the column at release, and the spread the plume already had.
-  //
-  // The climb drift is not a detail. A 12 km column takes half an hour to
-  // climb, and in a 48 m/s jet the particle is already a dozen kilometres
-  // downwind when it starts to fall — a quarter of the domain. Starting its
-  // fall over the vent instead handed it far more room to cross before it left
-  // the box, so the seeding thought ash lingered about twice as long as it does
-  // and put only half as many particles in the column as the running cloud has.
-  const top = { dx: 0, dy: 0, rel: p.rel, z: 0 };
-  windUpRise(top, 1);
-
-  const rr = colRadius({ z: p.rel, rad: p.rad });
-  const s0 = Math.sqrt(axisVar(0, plumeTau(p.rel - VENT_Z)));
-  const ox = top.dx + Math.cos(p.ang) * rr + gauss() * s0;
-  const oy = top.dy + Math.sin(p.ang) * rr + gauss() * s0;
-
-  // Fall residence is the time spent *inside the domain*, not the full fall to
-  // sea level: stepParticles recycles a particle the moment it lands or crosses
-  // an edge, so the truncated time is what sets the steady population. Using
-  // the untruncated fall time is what made a re-seed disagree with the cloud it
-  // was replacing.
-  const tf = recordFall(p.rel, p.d, p.rp, ox, oy);
-
-  if (Math.random() * (tr + tf) < tr) {
-    p.rising = true;
-    windUpRise(p, riseFrac(Math.random()));   // uniform in time, not in height
-    return;
+function fillSteady(C, count) {
+  const m = Math.min(count, POOL);
+  const start = new Int32Array(m), len = new Int32Array(m), cum = new Float64Array(m);
+  const src = [];
+  let used = 0, total = 0, got = 0;
+  for (let c = 0; c < m; c++) {
+    const p = newPart(C);
+    const n = trace(C, p, used);
+    if (!n) break;
+    start[got] = used; len[got] = n; used += n;
+    total += TT[start[got] + n - 1];
+    cum[got] = total;
+    src.push(p);
+    got++;
   }
-  p.rising = false;
-  sampleFall(p, tf * Math.random());
+  for (let i = 0; i < count && got; i++) {
+    // Pick a life with probability proportional to its length.
+    const u = Math.random() * total;
+    let lo = 0, hi = got - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (cum[mid] < u) lo = mid + 1; else hi = mid; }
+    const c = lo, s0 = start[c], n = len[c];
+    const T = TT[s0 + n - 1];
+
+    const p = newPart(C);
+    const q = src[c];
+    p.rel = q.rel; p.d = q.d; p.rp = q.rp; p.phi = q.phi; p.wf = q.wf;
+    if (i < got) { p.gx = q.gx; p.gy = q.gy; }
+
+    const want = T * Math.random();
+    let j = s0 + 1;
+    while (j < s0 + n - 1 && TT[j] < want) j++;
+    const t0 = TT[j - 1], t1 = TT[j];
+    const f = t1 > t0 ? clamp01((want - t0) / (t1 - t0)) : 0;
+    const lerp = (a) => a[j - 1] + (a[j] - a[j - 1]) * f;
+    p.x = lerp(TX); p.y = lerp(TY); p.z = Math.max(lerp(TZ), 1);
+    p.rs = lerp(TRS);
+    p.top = Math.max(TTOP[j - 1], p.z);
+    // S jumps to zero at the end of detrainment, so take it from the start of
+    // the step instead of interpolating across that jump.
+    p.S = TS[j - 1];
+    p.rising = p.S > 0.5;
+    parts.push(p);
+  }
 }
 
 /** Re-seed for the current mode. */
 export function seedParticles() {
   parts.length = 0;
   clock.t = 0; clock.released = 0; clock.done = false; clock.active = 0;
+  const C = column();
+  clock.budget = particleBudget();
   if (P.mode === 'eruption') return parts;   // nothing in the sky until t = 0+
-  for (let i = 0; i < NP; i++) {
-    const p = newPart();
-    placeSteady(p);
-    parts.push(p);
-  }
+  fillSteady(C, clock.budget);
   clock.active = parts.length;
   return parts;
 }
@@ -237,6 +331,7 @@ export function seedParticles() {
 export function replayEruption() {
   parts.length = 0;
   clock.t = 0; clock.released = 0; clock.active = 0; clock.done = false;
+  clock.budget = particleBudget();
   return parts;
 }
 
@@ -244,74 +339,57 @@ export function replayEruption() {
  * Advance every particle by dt model seconds and write the display buffers.
  * @param {number} dt model seconds
  * @param {Float32Array} pos xyz per particle, km / km(exaggerated) / km
- * @param {Float32Array} col rgb per particle
- * @returns {number} how many slots of pos/col were written
+ * @param {Float32Array} colr rgb per particle
+ * @returns {number} how many slots of pos/colr were written
  */
-export function stepParticles(dt, pos, col) {
+export function stepParticles(dt, pos, colr) {
+  const C = column();
   const erupting = P.mode === 'eruption';
+  const cap = Math.floor(pos.length / 3);
 
   if (erupting) {
     clock.t += dt;
+    if (!clock.budget) clock.budget = particleBudget();
     // Spread the particle budget evenly over the eruption, then stop emitting.
-    const want = Math.min(NP, Math.floor(NP * Math.min(1, clock.t / Math.max(P.dur, 1))));
-    while (clock.released < want) { parts.push(newPart()); clock.released++; }
+    const frac = Math.min(1, clock.t / Math.max(P.dur, 1));
+    const want = Math.min(clock.budget, Math.floor(clock.budget * frac));
+    while (clock.released < want) { parts.push(newPart(C)); clock.released++; }
   }
 
   let n = 0;
   for (let i = 0; i < parts.length; i++) {
     let p = parts[i];
-    if (p.rising) {
-      const sp = (p.z - VENT_Z) / Math.max(p.rel - VENT_Z, 1);
-      p.z += RISE_V0 * (RISE_A - RISE_B * sp) * dt;
-      const wr = windAt(p.z);
-      p.dx += wr.u * dt * sp * sp;
-      p.dy += wr.v * dt * sp * sp;
-      if (p.z >= p.rel) {
-        p.rising = false;
-        const r0 = colRadius(p);
-        p.dx += Math.cos(p.ang) * r0;
-        p.dy += Math.sin(p.ang) * r0;
-        const s0 = Math.sqrt(axisVar(0, plumeTau(p.rel - VENT_Z)));
-        p.dx += gauss() * s0; p.dy += gauss() * s0;
-      }
-    } else {
-      const ra = airRho(Math.max(p.z, 0));
-      const vs = vSettle(p.d, p.rp, ra);
-      const w = windAt(Math.max(p.z, 0));
-      p.z -= vs * dt;
-      p.dx += w.u * dt;
-      p.dy += w.v * dt;
-      const sw = Math.sqrt(2 * P.K * dt);
-      p.dx += gauss() * sw; p.dy += gauss() * sw;
+    // Sub-step so a fast playback rate cannot carry a particle straight
+    // through its detrainment layer. After 24 steps the rest is taken at once.
+    let left = dt;
+    for (let s = 0; left > 1e-6 && s < 24; s++) {
+      left -= stepOnce(C, p, left, s >= 12);
     }
 
-    let xy = partXY(p);
-    let xk = xy[0] / 1000, yk = xy[1] / 1000;
-    if (p.z <= elevAt(xk, yk) || xk < XW || xk > XE || yk < YS || yk > YN) {
+    if (outside(p)) {
       // Landed, or blown out of the domain. A steady cloud replaces it at the
-      // vent; an eruption run lets the sky empty, which is the whole point of
-      // that mode.
+      // vent. An eruption run lets the sky empty, which is the point of it.
       if (erupting) continue;
-      p = parts[i] = newPart();
-      xy = partXY(p);
-      xk = xy[0] / 1000; yk = xy[1] / 1000;
+      p = parts[i] = newPart(C);
     }
+    if (n >= cap) break;
 
     parts[n] = p;
+    const xy = partXY(p);
     const o = n * 3;
-    pos[o] = xk;
+    pos[o] = xy[0] / 1000;
     pos[o + 1] = (p.z / 1000) * P.ex;
-    pos[o + 2] = -yk;                       // scene -Z is north
-    const hot = Math.max(0, Math.min(1, (p.z - VENT_Z) / Math.max(P.H * 1000, 1)));
-    const dim = p.rising ? 0.55 : 1;        // keep the column from blowing out
-    col[o] = 0.92 * dim;
-    col[o + 1] = (0.50 + 0.30 * hot) * dim;
-    col[o + 2] = (0.28 + 0.44 * hot) * dim;
+    pos[o + 2] = -xy[1] / 1000;             // scene -Z is north
+    const hot = clamp01((p.z - VENT_Z) / Math.max(P.H * 1000, 1));
+    const dim = 1 - 0.45 * p.S;             // keep the dense column from blowing out
+    colr[o] = 0.92 * dim;
+    colr[o + 1] = (0.50 + 0.30 * hot) * dim;
+    colr[o + 2] = (0.28 + 0.44 * hot) * dim;
     n++;
   }
 
   parts.length = n;
   clock.active = n;
-  if (erupting) clock.done = clock.released >= NP && n === 0;
+  if (erupting) clock.done = clock.released >= clock.budget && n === 0;
   return n;
 }

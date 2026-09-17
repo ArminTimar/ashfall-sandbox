@@ -8,7 +8,7 @@
 import { N, KMW, KMH, XW, XE, YS, YN, PLACES, P } from './params.js';
 import { elev } from './terrain.js';
 import { elevAtSmooth } from './terrain.js';
-import { NP, seedParticles, stepParticles } from './particles.js';
+import { NP_MAX, seedParticles, stepParticles } from './particles.js';
 import { getCanvas } from './texture.js';
 import { buildVectors, updateVectorHeights, setLayerVisible } from './vectors.js';
 
@@ -21,11 +21,13 @@ let pgeo, ppos, pcol, host, labelEls = [];
 let dragging = null;
 const _v = new THREE.Vector3();
 
-export const orbit = { az: -0.62, el: 0.34, dist: 74, tx: 0, ty: 5.0, tz: 0 };
+// The domain is 100 km across. The oblique view frames the inner 60 km or so,
+// where nearly every deposit worth looking at lies, and Plan shows it all.
+export const orbit = { az: -0.62, el: 0.36, dist: 96, tx: 2, ty: 4.0, tz: -2 };
 
 export const VIEWS = {
-  oblique: { az: -0.62, el: 0.34, dist: 74, tx: 0, ty: 5.0, tz: 0 },
-  top:     { az: 0,     el: 1.48, dist: 64, tx: 3, ty: 0,   tz: -6 },
+  oblique: { az: -0.62, el: 0.36, dist: 96, tx: 2, ty: 4.0, tz: -2 },
+  top:     { az: 0,     el: 1.48, dist: 128, tx: 3.4, ty: 0,  tz: -6.5 },
   city:    { az: 1.46,  el: 0.12, dist: 30, tx: -4, ty: 3.0, tz: 0 }
 };
 
@@ -33,8 +35,8 @@ export function initScene(hostEl) {
   host = hostEl;
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0c1014);
-  scene.fog = new THREE.Fog(0x0c1014, 70, 150);
-  cam = new THREE.PerspectiveCamera(42, 1, 0.5, 400);
+  scene.fog = new THREE.Fog(0x0c1014, 120, 290);
+  cam = new THREE.PerspectiveCamera(42, 1, 0.5, 700);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -72,8 +74,8 @@ export function initScene(hostEl) {
   scene.add(fill);
 
   pgeo = new THREE.BufferGeometry();
-  ppos = new Float32Array(NP * 3);
-  pcol = new Float32Array(NP * 3);
+  ppos = new Float32Array(NP_MAX * 3);
+  pcol = new Float32Array(NP_MAX * 3);
   pgeo.setAttribute('position', new THREE.BufferAttribute(ppos, 3));
   pgeo.setAttribute('color', new THREE.BufferAttribute(pcol, 3));
   points = new THREE.Points(pgeo, new THREE.PointsMaterial({
@@ -86,6 +88,7 @@ export function initScene(hostEl) {
   applyExaggeration();
   bindControls();
   buildLabels();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureLabels);
   resize();
   // The scene's height comes from the flex layout, which changes without a
   // window resize — web fonts arriving, the readout row reflowing — so watch
@@ -108,7 +111,10 @@ export function applyExaggeration() {
 export function markTextureDirty() { if (tex) tex.needsUpdate = true; }
 
 /** Add the OpenStreetMap layers. Safe to skip; the scene works without them. */
-export function addVectors(doc) { return buildVectors(doc, scene); }
+export function addVectors(doc) {
+  addPlaceLabels(doc.places);
+  return buildVectors(doc, scene);
+}
 
 /** Show or hide one vector layer by id. */
 export function setVectorLayer(id, on) { setLayerVisible(id, on); }
@@ -135,7 +141,7 @@ function bindControls() {
   host.addEventListener('pointercancel', end);
   host.addEventListener('wheel', (e) => {
     e.preventDefault();
-    orbit.dist = Math.max(9, Math.min(150, orbit.dist * (1 + Math.sign(e.deltaY) * 0.09)));
+    orbit.dist = Math.max(9, Math.min(260, orbit.dist * (1 + Math.sign(e.deltaY) * 0.09)));
   }, { passive: false });
 }
 
@@ -156,27 +162,69 @@ function updateCam() {
   cam.lookAt(orbit.tx, orbit.ty, orbit.tz);
 }
 
-function buildLabels() {
-  const wrap = document.getElementById('labels');
-  labelEls = PLACES.map((pl) => {
-    const el = document.createElement('div');
-    el.className = 'pin' + (pl.vent ? ' vent' : '');
-    el.textContent = pl.n;
-    wrap.appendChild(el);
-    return { el, pl };
-  });
+// Label ranks, most important first. When two labels would overlap on screen,
+// the lower-ranked one is hidden, so zooming in reveals smaller places. The
+// vent and cities over 50,000 are always shown.
+const RANK = { vent: 0, t1: 1, peak: 2, airport: 2, t2: 3, t3: 4 };
+
+function addLabel(wrap, name, x, y, cls) {
+  const el = document.createElement('div');
+  el.className = 'pin ' + cls;
+  el.textContent = name;
+  wrap.appendChild(el);
+  labelEls.push({ el, x, y, rank: RANK[cls], lift: cls === 'vent' || cls === 'peak' ? 0.4 : 0.15, w: 0, h: 0 });
 }
 
+function buildLabels() {
+  const wrap = document.getElementById('labels');
+  for (const pl of PLACES) {
+    if (pl.kind === 'readout') continue;     // drawn from the data file instead
+    addLabel(wrap, pl.n, pl.x, pl.y, pl.kind);
+  }
+  sortLabels();
+  measureLabels();
+}
+
+/** Towns and cities from data/vectors.json. */
+function addPlaceLabels(places) {
+  const wrap = document.getElementById('labels');
+  for (const p of places || []) addLabel(wrap, p.n, p.x, p.y, 't' + p.tier);
+  sortLabels();
+  measureLabels();
+}
+
+function sortLabels() { labelEls.sort((a, b) => a.rank - b.rank); }
+
+/** Label boxes are measured once, and again when web fonts arrive. */
+function measureLabels() {
+  for (const L of labelEls) { L.w = L.el.offsetWidth; L.h = L.el.offsetHeight; }
+}
+
+export function setPlacesVisible(on) {
+  showPlaces = !!on;
+}
+let showPlaces = true;
+
+const placed = [];
 function updateLabels() {
   const w = host.clientWidth, h = host.clientHeight;
+  placed.length = 0;
   for (const L of labelEls) {
-    const e = (elevAtSmooth(L.pl.x, L.pl.y) / 1000) * P.ex;
-    _v.set(L.pl.x, e + (L.pl.vent ? 0.4 : 0.15), -L.pl.y).project(cam);
-    const vis = _v.z < 1 && Math.abs(_v.x) < 1.05 && Math.abs(_v.y) < 1.05;
-    L.el.classList.toggle('on', vis);
+    const e = (elevAtSmooth(L.x, L.y) / 1000) * P.ex;
+    _v.set(L.x, e + L.lift, -L.y).project(cam);
+    let vis = _v.z < 1 && Math.abs(_v.x) < 1.02 && Math.abs(_v.y) < 1.02;
+    if (vis && !showPlaces && L.rank > 0) vis = false;
+    const sx = (_v.x * 0.5 + 0.5) * w, sy = (-_v.y * 0.5 + 0.5) * h;
     if (vis) {
-      L.el.style.left = (_v.x * 0.5 + 0.5) * w + 'px';
-      L.el.style.top = (-_v.y * 0.5 + 0.5) * h + 'px';
+      const x0 = sx - L.w / 2 - 3, x1 = sx + L.w / 2 + 3, y0 = sy - L.h - 1, y1 = sy + 3;
+      for (const r of placed) {
+        if (x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]) { vis = L.rank <= 1; break; }
+      }
+      if (vis) placed.push([x0, y0, x1, y1]);
+    }
+    if (L.on !== vis) { L.el.classList.toggle('on', vis); L.on = vis; }
+    if (vis) {
+      L.el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -100%)`;
     }
   }
 }

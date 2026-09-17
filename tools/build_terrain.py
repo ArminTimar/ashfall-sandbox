@@ -24,6 +24,8 @@ import base64
 import concurrent.futures as cf
 import io
 import math
+import time
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -31,9 +33,9 @@ from PIL import Image
 
 # --- window -----------------------------------------------------------------
 Z = 12                      # zoom: each tile is ~8.3 km at this latitude
-X0, X1 = 3532, 3537         # tile x range, inclusive
-Y0, Y1 = 1665, 1670         # tile y range, inclusive
-GRID = 320                  # output grid side; must match N in js/params.js
+X0, X1 = 3529, 3540         # tile x range, inclusive (12 tiles, ~100 km)
+Y0, Y1 = 1662, 1673         # tile y range, inclusive
+GRID = 512                  # output grid side; must match N in js/params.js
 
 VENT_LON, VENT_LAT = 130.6575, 31.5931   # Minamidake
 OUT = "data/terrain.png"
@@ -52,16 +54,21 @@ def lat_of(y):
 def fetch(args):
     tx, ty = args
     url = f"https://cyberjapandata.gsi.go.jp/xyz/dem/{Z}/{tx}/{ty}.txt"
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             with urllib.request.urlopen(url, timeout=30) as r:
                 txt = r.read().decode()
             rows = [[0.0 if v == "e" else float(v) for v in line.split(",")]
                     for line in txt.strip().split("\n")]
             return tx, ty, np.array(rows, dtype=np.float32)
+        except urllib.error.HTTPError as exc:
+            # GSI serves no tile for open sea. A 404 means all water, so fill
+            # it with zeros and don't report it as missing.
+            if exc.code == 404:
+                return tx, ty, np.zeros((256, 256), dtype=np.float32)
         except Exception:
-            if attempt == 2:
-                return tx, ty, None
+            pass
+        time.sleep(1 + attempt)
     return tx, ty, None
 
 

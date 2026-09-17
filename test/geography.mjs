@@ -49,7 +49,7 @@ for (const p of PLACES) {
 }
 
 // The vent defines the origin, so it had better be at it.
-const vent = PLACES.find((p) => p.vent);
+const vent = PLACES.find((p) => p.kind === 'vent');
 check(Math.abs(lonToX(VENT_LON)) < 1e-9 && Math.abs(latToY(VENT_LAT)) < 1e-9,
   'the vent longitude/latitude should project to the origin');
 check(vent && Math.hypot(vent.x, vent.y) < 1e-9, 'the vent label is not at the origin');
@@ -68,6 +68,37 @@ if (!existsSync('data/vectors.json')) {
   check(Math.abs(bx0 - XW) < 0.01 && Math.abs(by0 - YS) < 0.01
      && Math.abs(bx1 - XE) < 0.01 && Math.abs(by1 - YN) < 0.01,
     `vectors.json was built for [${doc.bbox_km}], params.js has [${XW},${YS},${XE},${YN}]`);
+
+  // --- 4. every town label is inside the domain and on land ----------------
+  //
+  // A settlement node can sit right on the shore, where the 195 m grid cell
+  // under it is sea, so a label passes if any cell within one step is land.
+  const places = doc.places || [];
+  check(places.length >= 30, `only ${places.length} place labels in vectors.json`);
+  for (const t of [1, 2, 3]) {
+    check(places.some((p) => p.tier === t), `no tier ${t} places in vectors.json`);
+  }
+  const cellKm = KMW / (N - 1);
+  let wet = [];
+  for (const p of places) {
+    const inBox = p.x >= XW && p.x <= XE && p.y >= YS && p.y <= YN;
+    check(inBox, `${p.n} is outside the domain`);
+    let dry = false;
+    for (let dx = -1; dx <= 1 && !dry; dx++) {
+      for (let dy = -1; dy <= 1 && !dry; dy++) {
+        const s = sample(p.x + dx * cellKm, p.y + dy * cellKm);
+        if (s && s.land > 110) dry = true;
+      }
+    }
+    if (!dry) wet.push(p.n);
+  }
+  check(wet.length === 0, `place labels in the sea: ${wet.join(', ')}`);
+  const names = places.map((p) => p.n);
+  const dup = names.filter((n, i) => names.indexOf(n) !== i);
+  check(dup.length === 0, `duplicate place names: ${dup.join(', ')}`);
+  console.log(`
+  ${places.length} place labels, `
+    + [1, 2, 3].map((t) => `${places.filter((p) => p.tier === t).length} in tier ${t}`).join(', '));
 
   const EPS = 0.02;   // the build rounds to 10 m, so allow a rounding step out
   console.log('');

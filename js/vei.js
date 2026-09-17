@@ -1,14 +1,14 @@
 // Volcanic Explosivity Index from erupted tephra volume.
 //
-// Newhall & Self (1982) define the VEI on several criteria, of which bulk
-// tephra volume is the one a mass maps onto: each step above VEI 2 is a factor
+// Newhall & Self (1982) define the VEI on several criteria. Bulk tephra volume
+// is the one an erupted mass maps onto, and each step above VEI 2 is a factor
 // of ten. Column height is another criterion and is ignored here, so this is
 // the volume-based class only. Mass becomes volume through the deposit bulk
-// density, which means the class can move when that density does — a real
-// ambiguity in the index, not an artefact of the sandbox.
+// density, so the class can change when the density does. The index has that
+// ambiguity in real use as well.
 
 export const VEI = [
-  { vei: 0, lo: 0,    hi: 1e4,      example: 'Kīlauea lava lakes — effusive, barely explosive' },
+  { vei: 0, lo: 0,    hi: 1e4,      example: 'Kīlauea lava lakes, effusive with barely any explosions' },
   { vei: 1, lo: 1e4,  hi: 1e6,      example: "Stromboli's routine explosions" },
   { vei: 2, lo: 1e6,  hi: 1e7,      example: 'Whakaari / White Island, 2019' },
   { vei: 3, lo: 1e7,  hi: 1e8,      example: 'Nevado del Ruiz, 1985' },
@@ -16,7 +16,7 @@ export const VEI = [
   { vei: 5, lo: 1e9,  hi: 1e10,     example: 'Mount St Helens, 1980' },
   { vei: 6, lo: 1e10, hi: 1e11,     example: 'Pinatubo, 1991' },
   { vei: 7, lo: 1e11, hi: 1e12,     example: 'Tambora, 1815' },
-  { vei: 8, lo: 1e12, hi: Infinity, example: 'Toba, ~74 ka' }
+  { vei: 8, lo: 1e12, hi: Infinity, example: 'Toba, about 74,000 years ago' }
 ];
 
 /** VEI class for a bulk tephra volume in cubic metres. */

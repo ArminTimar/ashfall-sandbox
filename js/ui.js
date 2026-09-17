@@ -9,7 +9,7 @@
 
 import { P, PLACES, VENT_Z, applyPreset } from './params.js';
 import { TOGGLES } from './vectors.js';
-import { NP, clock } from './particles.js';
+import { clock } from './particles.js';
 import { stats, sampleAt, mastinMER } from './physics.js';
 import { UNITS, parseWith, parseDirection, parsePhi, parseSuzuki } from './parse.js';
 import { veiOfMass } from './vei.js';
@@ -140,7 +140,7 @@ export const FIELDS = [
     hint: (v) => `release peaks ${Math.round((1 - 1 / v) * 100)}% of the way up the column` },
   { id: 'dir', key: 'dir', kind: 'model', min: 0, max: 360, step: 5, wrap: true,
     parse: parseDirection, fmt: (v) => trim(v, 1),
-    hint: (v) => `${dirName(v)} wind — carries ash toward ${dirName((v + 180) % 360)}` },
+    hint: (v) => `${dirName(v)} wind, carries ash toward ${dirName((v + 180) % 360)}` },
   { id: 'spd', key: 'spd', kind: 'model', min: 0, max: 80, step: 1,
     parse: (s) => parseWith(s, UNITS.speed), fmt: (v) => trim(v, 1) },
   { id: 'top', key: 'top', kind: 'model', min: 0, max: 150, step: 1,
@@ -188,12 +188,12 @@ function renderField(F) {
 }
 
 const MODE_NOTE = {
-  steady: 'A cloud that has been erupting long enough to reach a steady state. '
-        + 'This is the one that matches the deposit below, which is itself a '
+  steady: 'An eruption that has gone on long enough for the cloud to settle into '
+        + 'a steady state. This matches the deposit on the map, which is also a '
         + 'steady-state solution.',
   eruption: 'One eruption of a set length, played out in time. The column dies '
-        + 'back when it ends and the sky empties. The deposit below still shows '
-        + 'the steady-state answer, not this run.'
+        + 'back when it ends and the sky empties. The deposit on the map still '
+        + 'shows the steady-state result.'
 };
 
 /** Show the mode switch, and grey out the controls the other mode ignores. */
@@ -213,7 +213,7 @@ export function updateClock() {
   const el = $('v-clock');
   if (!el) return;
   if (P.mode !== 'eruption') { el.textContent = ''; return; }
-  const pct = Math.min(100, Math.round((clock.released / NP) * 100));
+  const pct = Math.min(100, Math.round((clock.released / Math.max(clock.budget, 1)) * 100));
   el.textContent = clock.done
     ? 'settled at ' + fmtDur(clock.t)
     : `${fmtDur(clock.t)} · ${pct}% released · ${clock.active} aloft`;
@@ -286,7 +286,7 @@ function commitTyped(F, text, fire) {
   setNote(F, '');
   if (v < F.min || v > F.max) {
     v = Math.min(F.max, Math.max(F.min, v));
-    setNote(F, `Limited to ${F.fmt(v)} — accepted range is ${F.fmt(F.min)} to ${F.fmt(F.max)}`);
+    setNote(F, `Limited to ${F.fmt(v)}. Accepted range is ${F.fmt(F.min)} to ${F.fmt(F.max)}`);
   }
   F.set(v);
   box.removeAttribute('aria-invalid');
@@ -380,6 +380,8 @@ export function bindUI(handlers) {
     b.addEventListener('click', () => handlers.onView(b.dataset.v));
   }
   $('t-cont').addEventListener('change', handlers.onToggle);
+  const places = $('t-places');
+  if (places) places.addEventListener('change', () => handlers.onPlaces(places.checked));
   $('t-part').addEventListener('change', handlers.onToggle);
 
   for (const t of TOGGLES) {

@@ -1,6 +1,6 @@
 {
   "name": "ashfall-sandbox",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Interactive tephra advection-diffusion model for Sakurajima volcano on real GSI terrain",
   "type": "module",
   "license": "MIT",

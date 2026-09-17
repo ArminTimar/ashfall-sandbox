@@ -5,7 +5,7 @@ import { field, stats, compute } from './physics.js';
 import { loadTerrain } from './terrain.js';
 import { initTexture, paintTexture, fieldTex } from './texture.js';
 import { seedParticles, replayEruption, parts, partXY, clock } from './particles.js';
-import { initScene, renderFrame, resize, setView, applyExaggeration, markTextureDirty, setPlumeVisible, addVectors, setVectorLayer } from './scene.js';
+import { initScene, renderFrame, resize, setView, applyExaggeration, markTextureDirty, setPlumeVisible, addVectors, setVectorLayer, setPlacesVisible, orbit } from './scene.js';
 import { loadVectors } from './vectors.js';
 import { bindUI, syncInputs, syncLabels, syncMode, updateClock, updateReadout } from './ui.js';
 
@@ -80,7 +80,8 @@ Promise.all([
       paintTexture(showContours());
       markTextureDirty();
     },
-    onLayer: (layers, on) => { for (const id of layers) setVectorLayer(id, on); }
+    onLayer: (layers, on) => { for (const id of layers) setVectorLayer(id, on); },
+    onPlaces: setPlacesVisible
   });
 
   requestAnimationFrame(frame);
@@ -89,9 +90,9 @@ Promise.all([
   // cloud agree. See test/ for the automated versions.
   window.__ash = {
     P, field, fieldTex, parts: () => parts, partXY, clock,
-    stats: () => stats, recompute, seedParticles, replayEruption
+    stats: () => stats, recompute, seedParticles, replayEruption, orbit
   };
 }).catch((err) => {
-  $('loading').textContent = 'Terrain failed to load — is this being served over http?';
+  $('loading').textContent = 'Terrain failed to load. Is the page being served over http?';
   console.error(err);
 });

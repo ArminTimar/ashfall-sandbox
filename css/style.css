@@ -60,11 +60,17 @@ body {
   font-family: var(--f-ui);
   font-size: 15px;
   line-height: 1.55;
-  padding-inline: 18px;
-  padding-block: 0 48px;
+  padding: 0 14px;
   -webkit-font-smoothing: antialiased;
+  /* The page itself never scrolls. The map fills the window and only the
+     control column scrolls, so the animation is always in view. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
-.wrap { max-width: 1180px; margin: 0 auto; }
+html { height: 100%; overflow: hidden; }
+.wrap { max-width: 1480px; margin: 0 auto; height: 100%; }
 
 h1, h3 { margin: 0; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; line-height: 1.12; }
 h1 { font-size: clamp(1.8rem, 4.6vw, 2.6rem); }
@@ -79,49 +85,59 @@ a { color: var(--accent-ink); text-underline-offset: 2px; }
   color: var(--muted);
 }
 /* ---------- layout ---------- */
-/* The map is the page. On a desktop the view column fills the window exactly —
-   scene plus readouts, no scrolling to reach either — and the title lives at
-   the top of the control column instead of above the map, where it used to
-   push the scene half off the first screen. */
+/* Desktop: two columns exactly one window tall. The map column is fixed and
+   the control column scrolls on its own. overscroll-behavior stops a scroll
+   that reaches the end of the controls from being passed on to the page.
+   Phone: one scrolling column with the map pinned to its top. The view column
+   uses display: contents so the pinned map belongs to the scroller itself and
+   stays put all the way down to the footer. */
 .rig {
-  display: grid; grid-template-columns: 1fr 312px; gap: 14px; align-items: start;
-  margin-top: 12px;
-  --fold: calc(100vh - 24px);
+  display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px;
+  height: 100%;
+  padding-block: 12px;
 }
-@supports (height: 100dvh) { .rig { --fold: calc(100dvh - 24px); } }
+.col-view { display: flex; flex-direction: column; min-height: 0; }
+.col-view .panel { flex: 1 1 auto; min-height: 0; }
+.col-view #scene { height: 100%; min-height: 240px; }
+.col-view .readout { flex: none; margin-top: 12px; }
+.col-ctl {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.col-ctl::-webkit-scrollbar { width: 7px; }
+.col-ctl::-webkit-scrollbar-track { background: transparent; }
+.col-ctl::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.col-ctl::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
-@media (min-width: 981px) {
-  .col-view {
-    position: sticky; top: 12px;
-    height: var(--fold);
-    display: flex; flex-direction: column;
-  }
-  .col-view .panel { flex: 1 1 auto; min-height: 0; }
-  .col-view #scene { height: 100%; min-height: 320px; }
-  .col-view .readout { flex: none; margin-top: 12px; }
-  .col-ctl {
-    position: sticky; top: 12px;
-    max-height: var(--fold);
-    overflow-y: auto;
-    padding-right: 5px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--line) transparent;
-  }
-  .col-ctl::-webkit-scrollbar { width: 7px; }
-  .col-ctl::-webkit-scrollbar-track { background: transparent; }
-  .col-ctl::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
-  .col-ctl::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-}
 @media (max-width: 980px) {
-  .rig { grid-template-columns: 1fr; margin-top: 8px; }
-  .col-view .panel { position: sticky; top: 0; z-index: 5; }
+  body { padding: 0; }
+  .rig {
+    display: block;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 10px 24px;
+  }
+  .col-view { display: contents; }
+  .col-view .panel {
+    position: sticky; top: 0; z-index: 5;
+    margin: 0 -10px;
+    border-radius: 0; border-width: 0 0 1px;
+  }
+  .col-view #scene { height: clamp(220px, 46dvh, 460px); min-height: 0; }
+  .col-view .readout { margin-top: 10px; }
+  .col-ctl { overflow: visible; padding-right: 0; margin-top: 12px; }
 }
 
 .masthead { padding: 2px 2px 12px; }
 .masthead h1 { font-size: 1.12rem; letter-spacing: -0.01em; }
 .masthead .tag { margin: 3px 0 0; font-size: 0.76rem; color: var(--muted); }
 
-.about { margin-top: 36px; max-width: 72ch; }
+.about { margin-top: 22px; padding: 0 2px; }
+.about p { font-size: 0.8rem; }
 .about h2 { margin: 8px 0 10px; font-size: 1.2rem; letter-spacing: -0.01em; }
 
 /* ---------- 3D panel ---------- */
@@ -135,32 +151,29 @@ a { color: var(--accent-ink); text-underline-offset: 2px; }
 #scene {
   position: relative;
   width: 100%;
-  height: clamp(300px, 62vh, 660px);
   cursor: grab;
   touch-action: none;
 }
-@media (max-width: 980px) { #scene { height: clamp(260px, 52vh, 460px); } }
 #scene.drag { cursor: grabbing; }
 #scene canvas { display: block; width: 100%; height: 100%; }
 
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .pin {
-  /* The element is anchored by its bottom centre and the dot is pinned there,
-     so the marker lands on the projected point whatever the name is. Centring
-     the whole box instead — dot on the left, text running right — offsets the
-     dot by half the label width, which is up to 50 px, or about 3 km of map at
-     plan-view scale. That is what used to push Tarumizu out into the bay. */
-  position: absolute;
-  transform: translate(-50%, -100%);
-  padding-bottom: 8px;
-  font-size: 10.5px;
+  /* Anchored by its bottom centre, with the dot pinned there, so the marker
+     lands on the projected point whatever the length of the name. scene.js
+     positions it with a transform. */
+  position: absolute; left: 0; top: 0;
+  padding-bottom: 7px;
+  font-size: 10px;
   font-weight: 600;
-  color: #dce5ec;
+  line-height: 1.2;
+  color: #cfd9e1;
   white-space: nowrap;
   text-align: center;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.8);
   opacity: 0;
   transition: opacity 0.2s;
+  will-change: transform;
 }
 .pin.on { opacity: 1; }
 .pin::before {
@@ -169,12 +182,44 @@ a { color: var(--accent-ink); text-underline-offset: 2px; }
   left: 50%; bottom: 0;
   transform: translate(-50%, 50%);
   width: 4px; height: 4px;
-  background: #dce5ec;
+  background: #cfd9e1;
   border-radius: 50%;
-  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.55);
 }
-.pin.vent { color: #ffd27f; }
-.pin.vent::before { background: #ffd27f; width: 5px; height: 5px; }
+/* Cities over 50,000: larger, bright, ringed dot. */
+.pin.t1 { font-size: 12px; font-weight: 700; color: #f3f6f8; padding-bottom: 8px; }
+.pin.t1::before { width: 6px; height: 6px; background: #f3f6f8; box-shadow: 0 0 0 1.5px rgba(0,0,0,.6), 0 0 0 3px rgba(243,246,248,.35); }
+/* Other cities and towns: the default above. Districts: small and muted. */
+.pin.t3 { font-size: 9px; font-weight: 500; color: #9fb0bc; padding-bottom: 5px; }
+.pin.t3::before { width: 3px; height: 3px; background: #9fb0bc; box-shadow: none; }
+.pin.airport { font-size: 9.5px; font-style: italic; color: #a9c9dc; }
+.pin.airport::before { background: #a9c9dc; border-radius: 0; }
+.pin.vent, .pin.peak { color: #ffd27f; }
+.pin.vent::before, .pin.peak::before {
+  width: 0; height: 0; background: none; border-radius: 0; box-shadow: none;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-bottom: 7px solid #ffd27f;
+  transform: translate(-50%, 30%);
+}
+.pin.peak { font-size: 9.5px; color: #e9c47f; }
+
+.legend {
+  position: absolute; right: 12px; bottom: 11px;
+  display: flex; flex-direction: column; gap: 2px;
+  font-family: var(--f-mono); font-size: 0.57rem; color: #7d8894;
+  pointer-events: none; text-align: right;
+}
+.legend span { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.legend i { display: inline-block; flex: none; border-radius: 50%; }
+.legend .t1 { width: 6px; height: 6px; background: #f3f6f8; box-shadow: 0 0 0 1.5px rgba(243,246,248,.35); }
+.legend .t2 { width: 4px; height: 4px; background: #cfd9e1; }
+.legend .t3 { width: 3px; height: 3px; background: #9fb0bc; }
+.legend .vol {
+  width: 0; height: 0; border-radius: 0;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-bottom: 7px solid #ffd27f;
+}
+@media (max-width: 600px) { .legend { display: none; } }
 
 .badge {
   position: absolute; top: 11px; left: 13px;
@@ -328,9 +373,9 @@ button.p:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; 
 }
 
 footer {
-  margin-top: 34px; padding-top: 20px;
+  margin-top: 18px; padding: 14px 2px 8px;
   border-top: 1px solid var(--line);
-  font-size: 0.8rem; color: var(--muted);
+  font-size: 0.72rem; color: var(--muted);
 }
 footer p { color: var(--muted); max-width: none; }
 

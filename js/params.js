@@ -9,16 +9,16 @@ export const HS = 8200;           // m, atmospheric scale height
 
 export const NPHI = 12;           // grain size bins
 export const NH = 16;             // release height bins
-export const N = 320;             // grid cells per side (matches data/terrain.png)
+export const N = 512;             // grid cells per side (matches data/terrain.png)
 
 // Terrain extents in km relative to Minamidake (31.5931 N, 130.6575 E).
 // These come from the GSI tile bounds; see tools/build_terrain.py.
 // One binding per statement: tools/bundle.mjs rewrites `export` declarations
 // and only handles a single declarator each.
-export const XW = -21.60;
-export const XE = 28.40;
-export const YS = -18.18;
-export const YN = 31.45;
+export const XW = -46.60;
+export const XE = 53.40;
+export const YS = -43.09;
+export const YN = 56.18;
 export const KMW = XE - XW;
 export const KMH = YN - YS;
 export const CELLX = (KMW * 1000) / N;
@@ -41,20 +41,22 @@ export function lonToX(lon) { return (lon - VENT_LON) * KM_PER_DEG_LON; }
 /** Latitude in degrees to kilometres north of the vent. */
 export function latToY(lat) { return (lat - VENT_LAT) * KM_PER_DEG_LAT; }
 
-// Labelled places, held as longitude/latitude so each one can be checked
-// against a map; the kilometre offsets are derived and never typed by hand.
-// They used to be typed by hand, which is how Tarumizu ended up 1.5 km south
-// of the town, out towards the middle of Kagoshima Bay.
+// Fixed points, held as longitude/latitude so each one can be checked against
+// a map. The kilometre offsets are derived and never typed by hand. Typed
+// offsets are how Tarumizu once ended up out in Kagoshima Bay.
 //
-// Settlement and airport positions are OpenStreetMap; the vent is the
-// Minamidake summit that defines the origin.
+// Towns and cities are not listed here. They come from data/vectors.json,
+// built by tools/build_vectors.py. These are the vent, the two points the
+// readouts sample (key), and landmarks that are not settlements.
+//
+// Positions are OpenStreetMap. The vent is the Minamidake summit that defines
+// the origin. Kagoshima is the city's OpenStreetMap node, and it is labelled
+// from the data file, so it is not drawn twice.
 export const PLACES = [
-  { n: 'Minamidake',        lon: 130.65750, lat: 31.59310, vent: true },
-  { n: 'Kagoshima',         lon: 130.55719, lat: 31.59679, key: 'kago' },
-  { n: 'Kagoshima Airport', lon: 130.71944, lat: 31.80325, key: 'air' },
-  { n: 'Tarumizu',          lon: 130.70123, lat: 31.49269 },
-  { n: 'Aira',              lon: 130.62766, lat: 31.72828 },
-  { n: 'Kirishima',         lon: 130.76324, lat: 31.74101 }
+  { n: 'Minamidake',        lon: 130.65750, lat: 31.59310, kind: 'vent' },
+  { n: 'Kagoshima',         lon: 130.55719, lat: 31.59679, key: 'kago', kind: 'readout' },
+  { n: 'Kagoshima Airport', lon: 130.71944, lat: 31.80325, key: 'air', kind: 'airport' },
+  { n: 'Shinmoedake',       lon: 130.88470, lat: 31.90920, kind: 'peak' }
 ].map((p) => Object.assign(p, { x: lonToX(p.lon), y: latToY(p.lat) }));
 
 /**

@@ -7,9 +7,9 @@
 // lines follow the ground.
 //
 // They are drawn as three.js line segments rather than painted into the
-// deposit texture. The texture is 320 px across a 50 km domain — 156 m per
-// pixel — so a road painted there would be a wobbling 156 m-wide smear, and it
-// would also have to be composited under the ash on every parameter change.
+// deposit texture. The texture is 512 px across a 100 km domain, 195 m per
+// pixel, so a road painted there would be a blurry band 195 m wide. It would
+// also have to be composited under the ash on every parameter change.
 // Real geometry stays sharp at any zoom and costs nothing per frame.
 
 import { P } from './params.js';
