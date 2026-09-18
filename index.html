@@ -12,26 +12,26 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230c1014'/%3E%3Cpath d='M4 26 L13 8 L19 8 L28 26 Z' fill='%23b4551c'/%3E%3Cpath d='M13 8 L19 8 L21 12 L11 12 Z' fill='%23f8d271'/%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <!-- stamp:start (written by tools/stamp.mjs) -->
-<meta name="data-version" content="0.5.1">
+<meta name="data-version" content="0.5.2">
 <script type="importmap">
 {
   "imports": {
-    "./js/grid.js": "./js/grid.js?v=0.5.1",
-    "./js/help.js": "./js/help.js?v=0.5.1",
-    "./js/main.js": "./js/main.js?v=0.5.1",
-    "./js/params.js": "./js/params.js?v=0.5.1",
-    "./js/parse.js": "./js/parse.js?v=0.5.1",
-    "./js/particles.js": "./js/particles.js?v=0.5.1",
-    "./js/physics.js": "./js/physics.js?v=0.5.1",
-    "./js/proj.js": "./js/proj.js?v=0.5.1",
-    "./js/scene.js": "./js/scene.js?v=0.5.1",
-    "./js/terrain.js": "./js/terrain.js?v=0.5.1",
-    "./js/terrainmesh.js": "./js/terrainmesh.js?v=0.5.1",
-    "./js/texture.js": "./js/texture.js?v=0.5.1",
-    "./js/ui.js": "./js/ui.js?v=0.5.1",
-    "./js/vectors.js": "./js/vectors.js?v=0.5.1",
-    "./js/vei.js": "./js/vei.js?v=0.5.1",
-    "./js/volcanoes.js": "./js/volcanoes.js?v=0.5.1"
+    "./js/grid.js": "./js/grid.js?v=0.5.2",
+    "./js/help.js": "./js/help.js?v=0.5.2",
+    "./js/main.js": "./js/main.js?v=0.5.2",
+    "./js/params.js": "./js/params.js?v=0.5.2",
+    "./js/parse.js": "./js/parse.js?v=0.5.2",
+    "./js/particles.js": "./js/particles.js?v=0.5.2",
+    "./js/physics.js": "./js/physics.js?v=0.5.2",
+    "./js/proj.js": "./js/proj.js?v=0.5.2",
+    "./js/scene.js": "./js/scene.js?v=0.5.2",
+    "./js/terrain.js": "./js/terrain.js?v=0.5.2",
+    "./js/terrainmesh.js": "./js/terrainmesh.js?v=0.5.2",
+    "./js/texture.js": "./js/texture.js?v=0.5.2",
+    "./js/ui.js": "./js/ui.js?v=0.5.2",
+    "./js/vectors.js": "./js/vectors.js?v=0.5.2",
+    "./js/vei.js": "./js/vei.js?v=0.5.2",
+    "./js/volcanoes.js": "./js/volcanoes.js?v=0.5.2"
   }
 }
 </script>
@@ -64,29 +64,39 @@
           <span>District <i class="t3"></i></span>
           <span>Volcano <i class="vol"></i></span>
         </div>
-        <div id="loading">Loading terrain&hellip;</div>
+        <div id="loading">Loading terrain and map data&hellip;</div>
         <!-- Classic script, so it still runs when the module below is blocked.
-             Opening this file directly from disk fails: browsers refuse to load
-             ES modules over file://, and so does the terrain image. -->
+             It only complains after 25 s: the page loads about 4 MB of terrain
+             and map data and then builds the surface, which takes a few
+             seconds on a slow connection, and an earlier 1.5 s timeout put a
+             "check the console" message on screen during every normal load.
+             Opening this file directly from disk fails: browsers refuse to
+             load ES modules over file://, and so does the terrain image. -->
         <script>
         window.addEventListener('load', function () {
+          if (location.protocol === 'file:') return showFile();
           setTimeout(function () {
             if (window.__ash) return;
             var el = document.getElementById('loading');
             if (!el || el.classList.contains('gone')) return;
             el.style.textTransform = 'none';
             el.style.letterSpacing = 'normal';
+            el.innerHTML = 'Still loading. If nothing appears, check the browser console.';
+          }, 25000);
+          function showFile() {
+            var el = document.getElementById('loading');
+            if (!el) return;
+            el.style.textTransform = 'none';
+            el.style.letterSpacing = 'normal';
             el.style.fontSize = '0.82rem';
             el.style.lineHeight = '1.6';
             el.style.maxWidth = '34em';
-            el.innerHTML = location.protocol === 'file:'
-              ? '<b>This page has to be served over http.</b><br><br>'
-                + 'Browsers block ES modules on file:// URLs.<br><br>'
-                + 'Run <code>npm start</code> and open localhost:8000,<br>'
-                + 'or use the standalone build: <code>npm run bundle</code><br>'
-                + 'then open <code>dist/index.html</code>, which does work by double-click.'
-              : 'Nothing loaded. Check the browser console.';
-          }, 1500);
+            el.innerHTML = '<b>This page has to be served over http.</b><br><br>'
+              + 'Browsers block ES modules on file:// URLs.<br><br>'
+              + 'Run <code>npm start</code> and open localhost:8000,<br>'
+              + 'or use the standalone build: <code>npm run bundle</code><br>'
+              + 'then open <code>dist/index.html</code>, which does work by double-click.';
+          }
         });
         </script>
       </div>
@@ -312,7 +322,6 @@
       </div>
       <div class="toggles">
         <label><input type="checkbox" id="t-part" checked> Plume</label>
-        <label><input type="checkbox" id="t-trail" checked> Flight paths</label>
         <label><input type="checkbox" id="t-cont" checked> Isopachs</label>
         <button class="help" type="button" data-help="isopach" aria-label="About isopachs">?</button>
         <label><input type="checkbox" id="t-spin"> Rotate</label>
@@ -368,6 +377,6 @@
 
 
 </div>
-<script type="module" src="js/main.js?v=0.5.1"></script>
+<script type="module" src="js/main.js?v=0.5.2"></script>
 </body>
 </html>

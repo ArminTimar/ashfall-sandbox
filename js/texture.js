@@ -39,8 +39,11 @@ const RAMPS = {
 // Sea and land colours by theme, for the base layer and the sea plane.
 export const PALETTE = {
   dark: {
+    // Low ground has to read as land next to the sea. It used to be 64,68,58,
+    // close enough to the sea colour that the Saga and Chikugo plains looked
+    // like water, and land just above sea level was darker still.
     sea: [18, 31, 41], seaDeep: [24, 39, 50],
-    low: [64, 68, 58], landLo: [49, 63, 54], landHi: [79, 90, 78], rock: [96, 98, 92],
+    low: [68, 82, 64], landLo: [64, 80, 62], landHi: [92, 102, 84], rock: [112, 112, 102],
     contour: [250, 246, 240]
   },
   light: {

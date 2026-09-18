@@ -203,7 +203,59 @@ for (const [name, over] of [['fine ash', { phi: 3.5 }], ['lapilli', { phi: -2, s
   check(off < Math.max(1000, 0.15 * dist), `particles land ${(off / 1000).toFixed(1)} km from the deposit centre`);
 }
 
-// --- 6. two volcanoes, two independent clouds ------------------------------
+// --- 6. particles land at the same distances as the deposit ----------------
+//
+// The deposit is what the isopachs draw, so the cloud has to put the same
+// share of its mass at the same distances. This compares the fraction of
+// deposit mass beyond a ring with the fraction of particles landing beyond it.
+{
+  P.mode = 'eruption';
+  const p = Object.assign({}, BASE, { dur: 1, logM: 11, H: 9, phi: 1.5, dir: 250, spd: 12, top: 30 });
+  const f = makeField();
+  const st = computeField(p, VENT[0], VENT[1], VENT[2], f);
+  const RINGS = [10, 25, 50];
+  const massBeyond = RINGS.map(() => 0);
+  let mass = 0;
+  const [bi0, bi1, bj0, bj1] = f.bbox;
+  for (let j = bj0; j <= bj1; j++) {
+    for (let i = bi0; i <= bi1; i++) {
+      const L = f.data[j * GRID.nx + i];
+      if (L <= 0) continue;
+      const E = GRID.west + (i + 0.5) * GRID.cell, N = GRID.south + (j + 0.5) * GRID.cell;
+      const r = Math.hypot(E - VENT[0], N - VENT[1]) / 1000;
+      mass += L;
+      RINGS.forEach((R, k) => { if (r > R) massBeyond[k] += L; });
+    }
+  }
+
+  const cloud = makeCloud(...VENT);
+  replayCloud(cloud, p, 900);
+  const dists = [];
+  for (let i = 0; i < 6000; i++) {
+    const before = cloud.parts.slice();
+    stepCloud(cloud, p, 20, pos, col, 0, tint);
+    const alive = new Set(cloud.parts);
+    for (const q of before) {
+      if (alive.has(q)) continue;
+      const xy = partXY(q);
+      const E = VENT[0] + xy[0], N = VENT[1] + xy[1];
+      const onMap = E > GRID.west && E < GRID.east && N > GRID.south && N < GRID.north;
+      if (onMap) dists.push(Math.hypot(xy[0], xy[1]) / 1000);
+    }
+    if (!cloud.parts.length && cloud.clock.released >= cloud.clock.budget) break;
+  }
+  console.log('\n  beyond    deposit mass   landed particles');
+  RINGS.forEach((R, k) => {
+    const dep = (100 * massBeyond[k]) / mass;
+    const par = (100 * dists.filter((d) => d > R).length) / Math.max(dists.length, 1);
+    console.log(`  ${String(R).padStart(4)} km ${dep.toFixed(1).padStart(12)}% ${par.toFixed(1).padStart(15)}%`);
+    check(Math.abs(dep - par) < 8,
+      `beyond ${R} km the deposit has ${dep.toFixed(1)}% of its mass but ${par.toFixed(1)}% of particles land there`);
+  });
+  check(dists.length > 400, `only ${dists.length} particles landed on the map`);
+}
+
+// --- 7. two volcanoes, two independent clouds ------------------------------
 {
   P.mode = 'steady';
   const pa = Object.assign({}, BASE, { dir: 270 });

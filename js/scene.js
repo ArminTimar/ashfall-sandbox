@@ -6,7 +6,7 @@
 
 import { GRID, P, LANDMARKS } from './params.js';
 import { elevAtSmooth } from './terrain.js';
-import { NP_TOTAL, TRAIL_N, stepCloud, setTrails } from './particles.js';
+import { NP_TOTAL, stepCloud } from './particles.js';
 import { getCanvas, PALETTE } from './texture.js';
 import { initTerrainMesh, terrainStats } from './terrainmesh.js';
 import { buildVectors, updateVectorView, setLayerVisible, setVectorTheme } from './vectors.js';
@@ -15,7 +15,6 @@ import { VOLCANOES } from './volcanoes.js';
 // Module-private and assigned in initScene. Reach them through the functions
 // below, so tools/bundle.mjs never has to deal with reassigned exports.
 let scene, cam, renderer, tex, points, sea, sky, ambient, keyLight, fillLight, world;
-let trails, tgeo, tpos, tcol;
 let pgeo, ppos, pcol, host;
 const labelEls = [];
 const _v = new THREE.Vector3();
@@ -27,8 +26,9 @@ let goal = null;
 let onFocusChange = () => {};
 
 const DIST_MIN = 2, DIST_MAX = 620;
-// Two vertices per segment, one segment between successive trail points.
-const TRAIL_CAP = 800 * (TRAIL_N - 1) * 2;
+// The sea plane sits below sea level, so ground at 0 m still covers it. The
+// terrain's own sea cells carry any ash that fell on water and draw on top.
+const SEA_DEPTH = -0.02;
 
 function mapCentre() {
   return { x: (GRID.west + GRID.east) / 2000, z: -(GRID.south + GRID.north) / 2000 };
@@ -39,11 +39,18 @@ export function initScene(hostEl, opts = {}) {
   if (opts.onFocusChange) onFocusChange = opts.onFocusChange;
   scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x0c1014, 200, 900);
-  cam = new THREE.PerspectiveCamera(42, 1, 0.1, 5000);
+  cam = new THREE.PerspectiveCamera(42, 1, 0.5, 2000);
 
   // preserveDrawingBuffer keeps the last frame readable, so the canvas can be
   // saved as an image.
-  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  // logarithmicDepthBuffer because the view spans a few hundred metres to
+  // hundreds of kilometres. With an ordinary depth buffer there is no
+  // precision left at that range, and flat ground a few metres above sea level
+  // loses the depth test against the sea, so the Saga and Kurume plains
+  // flickered underwater.
+  renderer = new THREE.WebGLRenderer({
+    antialias: true, preserveDrawingBuffer: true, logarithmicDepthBuffer: true
+  });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   host.insertBefore(renderer.domElement, host.firstChild);
 
@@ -57,12 +64,11 @@ export function initScene(hostEl, opts = {}) {
   world = new THREE.Group();
   scene.add(world);
 
-  const terrainMat = new THREE.MeshLambertMaterial({
-    map: tex, side: THREE.DoubleSide,
-    // Push the ground a hair away from the camera so draped lines win the
-    // depth test against the surface they follow.
-    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
-  });
+  // No polygon offset here. It used to push the ground away from the camera so
+  // draped roads would win the depth test, but at a shallow viewing angle the
+  // offset grows with the depth slope and pushed low ground behind the sea.
+  // The roads lift themselves in their own shader instead.
+  const terrainMat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide });
   initTerrainMesh(world, terrainMat);
 
   // Sea to the horizon. It sits just below sea level so the terrain's own sea
@@ -71,7 +77,7 @@ export function initScene(hostEl, opts = {}) {
   sea = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000),
     new THREE.MeshLambertMaterial({ color: 0x122029 }));
   sea.rotation.x = -Math.PI / 2;
-  sea.position.set(c.x, -0.003, c.z);
+  sea.position.set(c.x, SEA_DEPTH, c.z);
   world.add(sea);
 
   // Sky: a gradient dome that moves with the camera and ignores fog.
@@ -107,17 +113,6 @@ export function initScene(hostEl, opts = {}) {
   points.frustumCulled = false;
   world.add(points);
 
-  // Flight paths, drawn as one line-segment soup that is rewritten each frame.
-  tgeo = new THREE.BufferGeometry();
-  tpos = new Float32Array(TRAIL_CAP * 3);
-  tcol = new Float32Array(TRAIL_CAP * 3);
-  tgeo.setAttribute('position', new THREE.BufferAttribute(tpos, 3));
-  tgeo.setAttribute('color', new THREE.BufferAttribute(tcol, 3));
-  trails = new THREE.LineSegments(tgeo, new THREE.LineBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false
-  }));
-  trails.frustumCulled = false;
-  world.add(trails);
 
   const v = VOLCANOES.find((x) => x.id === orbit.focus);
   if (v) { orbit.tx = v.E / 1000; orbit.tz = -v.N / 1000; }
@@ -154,10 +149,6 @@ export function applyTheme(theme) {
   pm.blending = dark ? THREE.AdditiveBlending : THREE.NormalBlending;
   pm.opacity = dark ? 0.72 : 0.85;
   pm.needsUpdate = true;
-  const tm = trails.material;
-  tm.blending = dark ? THREE.AdditiveBlending : THREE.NormalBlending;
-  tm.opacity = dark ? 0.5 : 0.4;
-  tm.needsUpdate = true;
   setVectorTheme(theme);
   host.dataset.theme = theme;
 }
@@ -177,18 +168,7 @@ export function addVectors(doc) {
 
 export function setVectorLayer(id, on) { setLayerVisible(id, on); }
 
-export function setPlumeVisible(v) {
-  if (points) points.visible = v;
-  if (trails) trails.visible = v && trailsWanted;
-}
-
-let trailsWanted = true;
-/** Show or hide the flight paths behind the particles. */
-export function setTrailsVisible(v) {
-  trailsWanted = !!v;
-  setTrails(trailsWanted);
-  if (trails) trails.visible = points.visible && trailsWanted;
-}
+export function setPlumeVisible(v) { if (points) points.visible = v; }
 
 // ---------------------------------------------------------------------------
 // Camera
@@ -331,6 +311,13 @@ function updateCam(dt) {
   const under = (elevAtSmooth(cam.position.x * 1000, -cam.position.z * 1000) / 1000) * P.ex + 0.2;
   if (cam.position.y < under) cam.position.y = under;
   cam.lookAt(orbit.tx, ty, orbit.tz);
+  // Keep the depth range as tight as the view allows.
+  const near = Math.max(0.05, Math.min(orbit.dist * 0.02, 4));
+  const far = orbit.dist * 8 + 600;
+  if (cam.near !== near || cam.far !== far) {
+    cam.near = near; cam.far = far;
+    cam.updateProjectionMatrix();
+  }
   sky.position.copy(cam.position);
   scene.fog.near = orbit.dist * 1.1;
   scene.fog.far = orbit.dist * 4 + 250;
@@ -539,46 +526,9 @@ export function renderFrame(dt, opts) {
     pgeo.setDrawRange(0, slot);
     pgeo.attributes.position.needsUpdate = true;
     pgeo.attributes.color.needsUpdate = true;
-    if (trails.visible) drawTrails();
   }
   updateLabels();
   renderer.render(scene, cam);
-}
-
-/**
- * Rewrite the flight paths. Each particle's recorded track becomes a run of
- * segments that fade towards the oldest point, so the head of the trail is the
- * particle itself.
- */
-function drawTrails() {
-  const dark = P.theme === 'dark';
-  let k = 0;
-  for (const v of VOLCANOES) {
-    if (!v.erupting || !v.cloud) continue;
-    for (const q of v.cloud.parts) {
-      if (!q.tr || q.trN < 2) continue;
-      if (k + (q.trN - 1) * 6 > TRAIL_CAP * 3) return finishTrails(k);
-      for (let i = 1; i < q.trN; i++) {
-        const a = (i - 1) * 3, b = i * 3;
-        tpos[k] = q.tr[a]; tpos[k + 1] = q.tr[a + 1]; tpos[k + 2] = q.tr[a + 2];
-        tpos[k + 3] = q.tr[b]; tpos[k + 4] = q.tr[b + 1]; tpos[k + 5] = q.tr[b + 2];
-        // Older points are dimmer. In the light theme the trail darkens
-        // instead, since it is drawn over a bright sky.
-        const f0 = (i - 1) / q.trN, f1 = i / q.trN;
-        const c0 = dark ? f0 : 1 - 0.55 * f0, c1 = dark ? f1 : 1 - 0.55 * f1;
-        tcol[k] = c0 * (dark ? 0.85 : 0.42); tcol[k + 1] = c0 * (dark ? 0.45 : 0.42); tcol[k + 2] = c0 * (dark ? 0.25 : 0.44);
-        tcol[k + 3] = c1 * (dark ? 0.85 : 0.42); tcol[k + 4] = c1 * (dark ? 0.45 : 0.42); tcol[k + 5] = c1 * (dark ? 0.25 : 0.44);
-        k += 6;
-      }
-    }
-  }
-  finishTrails(k);
-}
-
-function finishTrails(k) {
-  tgeo.setDrawRange(0, k / 3);
-  tgeo.attributes.position.needsUpdate = true;
-  tgeo.attributes.color.needsUpdate = true;
 }
 
 /** The WebGL canvas, for saving images. */

@@ -8,7 +8,7 @@ import { initTexture, paintTexture, rampCSS } from './texture.js';
 import { makeCloud, seedCloud, replayCloud, particleBudget, NP_TOTAL } from './particles.js';
 import {
   initScene, renderFrame, resize, setView, flyTo, setFocus, applyExaggeration, markTextureDirty,
-  setPlumeVisible, setTrailsVisible, addVectors, setVectorLayer, setLabelClasses, applyTheme, refreshVentLabels,
+  setPlumeVisible, addVectors, setVectorLayer, setLabelClasses, applyTheme, refreshVentLabels,
   orbit, getRenderCanvas, debugStats
 } from './scene.js';
 import { loadVectors } from './vectors.js';
@@ -128,6 +128,12 @@ const dataUrl = (f) => (DATA_V ? `${f}?v=${DATA_V}` : f);
 P.theme = readTheme();
 document.documentElement.dataset.theme = P.theme;
 
+/** Say what the page is waiting for, until the scene replaces it. */
+function loadingText(t) {
+  const el = $('loading');
+  if (el && !el.classList.contains('gone')) el.textContent = t;
+}
+
 // The map layers are optional decoration for a physics model, so they never
 // block the terrain. If they fail to load the sandbox still runs without roads.
 Promise.all([
@@ -137,6 +143,7 @@ Promise.all([
     return null;
   })
 ]).then(([, vectors]) => {
+  loadingText('Building the surface…');
   initTexture();
   initScene($('scene'), { onFocusChange: syncFocus });
   if (vectors) { addVectors(vectors); setPlaces(vectors.places); } else setPlaces([]);
@@ -169,7 +176,6 @@ Promise.all([
     onToggle: () => {
       const on = $('t-part').checked;
       setPlumeVisible(on);
-      setTrailsVisible($('t-trail').checked);
       if (on) for (const v of VOLCANOES) restartCloud(v);
       repaint();
     },

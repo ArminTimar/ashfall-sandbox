@@ -38,18 +38,6 @@ import { elevAt } from './terrain.js';
 // The number of particles scales with erupted mass: 4.5 times as many for
 // every tenfold increase, between these limits. The display buffers in
 // scene.js hold NP_TOTAL, shared by all erupting volcanoes.
-// Flight paths: each tracked particle keeps its last TRAIL_N positions, one
-// every TRAIL_DT model seconds, in scene kilometres. scene.js draws them.
-export const TRAIL_N = 10;
-export const TRAIL_DT = 30;
-// Only a sample of the cloud draws a path. Line segments are slow on
-// integrated graphics (ANGLE turns every one into a quad), and a few hundred
-// paths read better than a screen full of them anyway.
-const TRAIL_PER_CLOUD = 120;
-let trailsOn = true;
-
-export function setTrails(on) { trailsOn = !!on; }
-
 export const NP_MIN = 120;
 export const NP_MAX = 6000;
 export const NP_TOTAL = 16000;
@@ -169,30 +157,13 @@ function newPart(C, p) {
     d: Math.pow(2, -phi) / 1000,
     rp: 1200 + 1200 * ((phi - PHI_MIN) / (PHI_MAX - PHI_MIN)),
     phi,
-    rising: true,
-    tr: null, trN: 0, trT: 0      // flight path, filled in by stepCloud
+    rising: true
   };
 }
 
 /** Particle position relative to its vent, m. */
 export function partXY(q) {
   return [q.x + q.gx * q.rs, q.y + q.gy * q.rs];
-}
-
-/** Append to a particle's flight path, oldest point dropped when it is full. */
-function recordTrail(q, x, y, z, dt) {
-  if (!q.tr) { q.tr = new Float32Array(TRAIL_N * 3); q.trN = 0; q.trT = TRAIL_DT; }
-  q.trT += dt;
-  if (q.trT < TRAIL_DT) return;
-  q.trT = 0;
-  const t = q.tr;
-  if (q.trN === TRAIL_N) {
-    t.copyWithin(0, 3);
-    q.trN--;
-  }
-  const k = q.trN * 3;
-  t[k] = x; t[k + 1] = y; t[k + 2] = z;
-  q.trN++;
 }
 
 /**
@@ -413,8 +384,6 @@ export function stepCloud(cloud, p, dt, pos, colr, from, tint) {
 
     const xy = partXY(q);
     const o = slot * 3;
-    if (trailsOn && n <= TRAIL_PER_CLOUD) recordTrail(q, (e0 + xy[0]) / 1000, q.z / 1000, -(n0 + xy[1]) / 1000, dt);
-    else if (q.tr) { q.tr = null; q.trN = 0; }
     pos[o] = (e0 + xy[0]) / 1000;
     pos[o + 1] = q.z / 1000;          // the scene group applies the exaggeration
     pos[o + 2] = -(n0 + xy[1]) / 1000;      // scene z points south

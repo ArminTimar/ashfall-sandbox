@@ -456,7 +456,6 @@ export function bindUI(handlers) {
   const labelCfg = () => Object.fromEntries(labelBoxes.map(([id, box]) => [id, box.checked]));
   for (const [, box] of labelBoxes) box.addEventListener('change', () => handlers.onLabels(labelCfg()));
   handlers.onLabels(labelCfg());
-  $('t-trail').addEventListener('change', handlers.onToggle);
   $('t-part').addEventListener('change', handlers.onToggle);
 
   for (const t of TOGGLES) {

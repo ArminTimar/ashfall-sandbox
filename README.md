@@ -212,17 +212,33 @@ deposit gives the cloud through τ.
 The number of particles scales with erupted mass: about 250 at 10⁶ kg, 800 at
 2 × 10⁸ kg and 3,100 at 10¹¹ kg, up to 6,000.
 
-**Flight paths.** Up to 120 particles per volcano keep their last ten positions
-and draw them as a fading trail, which shows the arc from the column to the
-ground. Only a sample does this because WebGL line segments are slow on
-integrated graphics: drawing 17,000 of them cost 77 ms a frame, against 3 ms
-for the few hundred drawn now.
+Ash stays up a long time. Measured over the presets, the median particle is in
+the air 16 to 53 model minutes, and the finest tail drifts for hours before
+landing or leaving the map. Nothing hangs there forever: in five model hours a
+steady cloud turns over two to ten times. Playback defaults to 120 times real
+speed, so a typical flight takes about ten seconds to watch.
 
-Ash really does stay up a long time. Measured over the presets, the median
-particle is in the air 16 to 53 model minutes, and the finest tail drifts for
-hours before landing or leaving the map. Nothing hangs there forever: in five
-model hours a steady cloud turns over two to ten times. Playback defaults to
-120 times real speed, so a typical flight takes about ten seconds to watch.
+### The cloud and the deposit are the same model
+
+The particles follow the settling velocity, wind and diffusion the deposit is
+built from, so they have to put the same share of the mass at the same
+distances. For a 9 km plume of 10¹¹ kg:
+
+| Beyond | Deposit mass | Landed particles |
+| --- | --- | --- |
+| 10 km | 84.4% | 85.8% |
+| 25 km | 54.2% | 56.1% |
+| 50 km | 27.0% | 26.3% |
+
+`test/particles.mjs` checks this on every run and fails if any ring differs by
+more than 8 points.
+
+The cloud still looks wider than the isopachs, for two reasons that are both
+real rather than a disagreement. It shows ash that is still in the air, which
+is spread along the whole flight rather than gathered where it will land. And
+some of that ash lands beyond the map: for the Taishō preset 26% of the
+particles leave the map, so the deposit never draws them. The readout under the
+map reports that share.
 
 There are two modes.
 
@@ -272,7 +288,8 @@ Position agrees within about 1% and spread within 1.5%, at both step sizes.
 **`test/particles.mjs`** checks the animation. A fresh seed has to match a
 cloud run to equilibrium in four grain size and wind regimes. The particle
 count has to follow the erupted mass. An eruption run has to start empty, fill
-and clear. No particle's vertical velocity may change by more than 4 m/s in
+and clear. Particles have to land at the same distances as the deposit puts its
+mass. No particle's vertical velocity may change by more than 4 m/s in
 one second, and none may jump more than 700 m sideways (the previous scheme
 reached 27 m/s and 1.4 km when it released a particle). Particles have to land
 within 15% of the deposit's centre, and two volcanoes' clouds have to stay
@@ -325,7 +342,11 @@ These matter if you compare the sandbox with anything real.
   behave plausibly. They are not a plume model such as the one in Degruyter &
   Bonadonna (2012), and they don't feed into the deposit.
 - **Map edge.** Ash blown out to sea past the map edge is gone. The readout
-  reports how much of the selected volcano's erupted mass landed on the map.
+  reports how much of the selected volcano's erupted mass landed on the map,
+  which for the Taishō preset is about three quarters.
+- **The far tail is too heavy.** With no aggregation and Fickian diffusion
+  only, the finest ash drifts further than it would in reality, which puts more
+  mass at the edges of the map than a real deposit would have.
 - **Independent eruptions.** Each volcano has its own wind, so two eruptions on
   the same day can have contradictory winds. That is deliberate for now.
 - **Presets are partly assumed.** See the notes under each preset for which
@@ -482,6 +503,16 @@ which is cheaper than the bugs.
 
 Heights are stored in real kilometres and the vertical exaggeration is a scale
 applied to the whole scene, so that slider never rebuilds anything.
+
+Low ground needs two more things to draw correctly. The camera sees from a few
+hundred metres to hundreds of kilometres, which an ordinary depth buffer cannot
+resolve, so the renderer uses a logarithmic one and the near and far planes
+follow the camera distance. The ground also carried a polygon offset, added so
+draped roads would win the depth test, and at a shallow viewing angle that
+offset grows with the depth slope and pushed flat land behind the sea. The
+roads lift themselves in their own shader instead. Without those two fixes the
+Saga and Chikugo plains, a few metres above sea level, flickered underwater and
+the coastline changed shape as the camera turned.
 
 ## Map layers and places
 
