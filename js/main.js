@@ -29,10 +29,23 @@ function readTheme() {
   return 'dark';
 }
 
-/** Particle budget for one volcano, shared out when several are erupting. */
+/**
+ * How many particles to draw for one volcano.
+ *
+ * On its own, a volcano gets a count that grows slowly with erupted mass, so a
+ * small eruption is still visible. When several erupt at once the largest sets
+ * the scale and the rest are drawn in proportion to their mass, because a
+ * count that compressed four decades of mass into a factor of eight made a
+ * phreatic puff look like Taisho. A floor of 30 keeps a small eruption from
+ * disappearing entirely.
+ */
 function budgetFor(v) {
-  const n = VOLCANOES.filter((x) => x.erupting).length;
-  return Math.min(particleBudget(v.p.logM), Math.floor(NP_TOTAL / Math.max(n, 1)));
+  const on = VOLCANOES.filter((x) => x.erupting);
+  if (!v.erupting || !on.length) return 0;
+  const maxLog = Math.max(...on.map((x) => x.p.logM));
+  const lead = particleBudget(maxLog);
+  const share = Math.round(lead * Math.pow(10, v.p.logM - maxLog));
+  return Math.min(Math.max(30, share), Math.floor(NP_TOTAL / on.length));
 }
 
 function ensure(v) {

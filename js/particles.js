@@ -142,8 +142,16 @@ function plumeRadius(C, z) {
 // ---------------------------------------------------------------------------
 
 function newPart(C, p) {
+  // Draw from the same grain size distribution the deposit uses: a Gaussian in
+  // phi, truncated at +/-5 and renormalised. Clamping to the range instead
+  // would pile the whole tail onto exactly phi 5, the finest and by far the
+  // longest-lived size. For the Kuju preset that was 16% of every particle,
+  // and because those drift for hours they then dominated the sky.
   let phi = p.phi + p.sig * gauss();
-  phi = Math.max(PHI_MIN, Math.min(PHI_MAX, phi));
+  for (let k = 0; phi < PHI_MIN || phi > PHI_MAX; k++) {
+    if (k > 40) { phi = Math.max(PHI_MIN, Math.min(PHI_MAX, phi)); break; }
+    phi = p.phi + p.sig * gauss();
+  }
   const gx = gauss(), gy = gauss();
   return {
     x: 0, y: 0, z: C.base,

@@ -15,11 +15,11 @@
 //
 //   node test/particles.mjs
 
-import { P, GRID } from '../js/params.js';
+import { P, GRID, NPHI } from '../js/params.js';
 import { setDEM } from '../js/terrain.js';
 import { NP_MAX, NP_TOTAL, makeCloud, seedCloud, replayCloud, stepCloud, partXY,
          particleBudget } from '../js/particles.js';
-import { makeField, computeField } from '../js/physics.js';
+import { makeField, computeField, grainBins } from '../js/physics.js';
 
 let fail = 0;
 const check = (cond, msg) => { if (!cond) { console.log('  FAIL ' + msg); fail++; } };
@@ -203,7 +203,51 @@ for (const [name, over] of [['fine ash', { phi: 3.5 }], ['lapilli', { phi: -2, s
   check(off < Math.max(1000, 0.15 * dist), `particles land ${(off / 1000).toFixed(1)} km from the deposit centre`);
 }
 
-// --- 6. particles land at the same distances as the deposit ----------------
+// --- 6. particles carry the deposit's grain sizes --------------------------
+//
+// The deposit splits its mass over 12 phi bins, a Gaussian truncated at +/-5
+// and renormalised. Particles have to be released with the same mix. Clamping
+// a Gaussian draw to the range instead of redrawing piles the whole tail onto
+// exactly phi 5, the finest and longest-lived size, which then takes over the
+// sky: for a distribution centred at phi 3.5 that was 16% of every particle.
+{
+  P.mode = 'eruption';
+  const p = Object.assign({}, BASE, { phi: 3.5, sig: 1.5, dur: 60 });
+  const bins = grainBins(p).w;
+  const W = 10 / NPHI;
+  const counts = new Array(NPHI).fill(0);
+  let total = 0;
+  for (let rep = 0; rep < 8; rep++) {
+    const cloud = makeCloud(...VENT);
+    replayCloud(cloud, p, 600);
+    const seen = new Set();
+    for (let i = 0; i < 8; i++) {
+      stepCloud(cloud, p, 10, pos, col, 0, tint);
+      for (const q of cloud.parts) {
+        if (seen.has(q)) continue;
+        seen.add(q);
+        let k = Math.floor((q.phi + 5) / W);
+        if (k < 0) k = 0;
+        if (k >= NPHI) k = NPHI - 1;
+        counts[k]++; total++;
+      }
+    }
+  }
+  let worst = 0, worstBin = 0;
+  for (let j = 0; j < NPHI; j++) {
+    const got = counts[j] / total, want = bins[j];
+    if (Math.abs(got - want) > worst) { worst = Math.abs(got - want); worstBin = -5 + W * (j + 0.5); }
+  }
+  console.log(`\n  grain sizes at release match the deposit within ${(100 * worst).toFixed(1)} `
+    + `points (worst at phi ${worstBin.toFixed(2)}, ${total} particles)`);
+  check(worst < 0.03, `the release grain mix is ${(100 * worst).toFixed(1)} points off the deposit at phi ${worstBin.toFixed(2)}`);
+  // The finest bin is the one clamping used to inflate.
+  const finest = counts[NPHI - 1] / total;
+  check(Math.abs(finest - bins[NPHI - 1]) < 0.03,
+    `the finest bin holds ${(100 * finest).toFixed(1)}% of particles but ${(100 * bins[NPHI - 1]).toFixed(1)}% of deposit mass`);
+}
+
+// --- 7. particles land at the same distances as the deposit ----------------
 //
 // The deposit is what the isopachs draw, so the cloud has to put the same
 // share of its mass at the same distances. This compares the fraction of
@@ -255,7 +299,7 @@ for (const [name, over] of [['fine ash', { phi: 3.5 }], ['lapilli', { phi: -2, s
   check(dists.length > 400, `only ${dists.length} particles landed on the map`);
 }
 
-// --- 7. two volcanoes, two independent clouds ------------------------------
+// --- 8. two volcanoes, two independent clouds ------------------------------
 {
   P.mode = 'steady';
   const pa = Object.assign({}, BASE, { dir: 270 });

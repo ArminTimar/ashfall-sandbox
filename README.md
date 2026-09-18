@@ -209,8 +209,21 @@ the strong and weak plume distinction of Bonadonna & Phillips (2003). The plume
 widens to 8% of the height climbed, which is exactly the starting spread the
 deposit gives the cloud through τ.
 
-The number of particles scales with erupted mass: about 250 at 10⁶ kg, 800 at
-2 × 10⁸ kg and 3,100 at 10¹¹ kg, up to 6,000.
+**How many particles.** On its own, a volcano gets a count that grows slowly
+with erupted mass: about 250 at 10⁶ kg, 800 at 2 × 10⁸ kg and 3,100 at 10¹¹ kg,
+up to 6,000. That compression keeps a small eruption visible, but it is not a
+fair comparison, so when several volcanoes erupt at once the largest sets the
+scale and the others are drawn in proportion to their mass. Taishō against
+Kujū 1995 is 10,000 to 1 in mass, and used to be 7.6 to 1 in particles.
+
+**What the cloud is made of.** Particles leave the vent with the deposit's
+grain size mix, within a point per bin. What is in the air at any moment is a
+different distribution, and it should be: in a steady state each size is
+present in proportion to how much is released times how long it stays up, and
+fine ash stays up far longer. For the Kujū preset the finest bin is 20% of what
+is released and 58% of what is in the sky. That is the physics, not a display
+choice, and a seeded cloud matches a cloud run to equilibrium within a few
+points.
 
 Ash stays up a long time. Measured over the presets, the median particle is in
 the air 16 to 53 model minutes, and the finest tail drifts for hours before
@@ -288,8 +301,9 @@ Position agrees within about 1% and spread within 1.5%, at both step sizes.
 **`test/particles.mjs`** checks the animation. A fresh seed has to match a
 cloud run to equilibrium in four grain size and wind regimes. The particle
 count has to follow the erupted mass. An eruption run has to start empty, fill
-and clear. Particles have to land at the same distances as the deposit puts its
-mass. No particle's vertical velocity may change by more than 4 m/s in
+and clear. Particles have to be released with the deposit's grain size mix,
+within 3 points per bin, and to land at the same distances as the deposit puts
+its mass. No particle's vertical velocity may change by more than 4 m/s in
 one second, and none may jump more than 700 m sideways (the previous scheme
 reached 27 m/s and 1.4 km when it released a particle). Particles have to land
 within 15% of the deposit's centre, and two volcanoes' clouds have to stay
