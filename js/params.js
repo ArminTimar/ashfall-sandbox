@@ -33,7 +33,9 @@ export function setGrid(meta) {
  *   rate   model seconds per wall-clock second
  *   theme  'dark' or 'light'
  */
-export const P = { ex: 3, mode: 'steady', rate: 45, theme: 'dark' };
+// rate 120 means a particle that takes 20 model minutes to fall lands in about
+// ten seconds on screen, which is what makes the flight visible.
+export const P = { ex: 3, mode: 'steady', rate: 120, theme: 'dark' };
 
 // Airports, from OpenStreetMap. Settlements come from data/vectors.json.
 export const LANDMARKS = [

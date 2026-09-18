@@ -131,14 +131,14 @@ const bundle = [
   `const __TERRAIN_META = ${terrainMeta};`,
   ...modules
 ].join('\n\n')
-  .replace(/loadTerrain\((['"])data\/terrain\.png\1, (['"])data\/terrain\.json\2\)/g,
+  .replace(/loadTerrain\(dataUrl\((['"])data\/terrain\.png\1\), dataUrl\((['"])data\/terrain\.json\2\)\)/g,
     'loadTerrain(__TERRAIN_URL, __TERRAIN_META)')
-  .replace(/loadVectors\((['"])data\/vectors\.json\1\)/g, 'loadVectors(__VECTORS)');
+  .replace(/loadVectors\(dataUrl\((['"])data\/vectors\.json\1\)\)/g, 'loadVectors(__VECTORS)');
 
 let out = html
   .replace(/<link rel="stylesheet" href="css\/style\.css">/,
     `<style>\n${css}\n</style>`)
-  .replace(/<script type="module" src="js\/main\.js"><\/script>/,
+  .replace(/<script type="module" src="js\/main\.js(\?v=[^"]*)?"><\/script>/,
     `<script type="module">\n${bundle}\n</script>`);
 
 if (three) {
@@ -150,6 +150,10 @@ if (three) {
 
 // The file:// warning is pointless once the page actually works from file://.
 out = out.replace(/<!-- Classic script[\s\S]*?<\/script>/, '');
+
+// The import map and the version tag exist to stop a browser pairing new code
+// with cached modules or data. A single file has neither, so they go.
+out = out.replace(/<!-- stamp:start[\s\S]*?<!-- stamp:end -->\n?/, '');
 
 await mkdir(OUT_DIR, { recursive: true });
 await writeFile(join(OUT_DIR, 'index.html'), out);

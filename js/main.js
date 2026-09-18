@@ -8,7 +8,7 @@ import { initTexture, paintTexture, rampCSS } from './texture.js';
 import { makeCloud, seedCloud, replayCloud, particleBudget, NP_TOTAL } from './particles.js';
 import {
   initScene, renderFrame, resize, setView, flyTo, setFocus, applyExaggeration, markTextureDirty,
-  setPlumeVisible, addVectors, setVectorLayer, setPlacesVisible, applyTheme, refreshVentLabels,
+  setPlumeVisible, setTrailsVisible, addVectors, setVectorLayer, setLabelClasses, applyTheme, refreshVentLabels,
   orbit, getRenderCanvas, debugStats
 } from './scene.js';
 import { loadVectors } from './vectors.js';
@@ -120,14 +120,19 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// Data files carry the release version so a browser never pairs new code with
+// cached data from an older release. tools/stamp.mjs writes the meta tag.
+const DATA_V = (document.querySelector('meta[name="data-version"]') || {}).content;
+const dataUrl = (f) => (DATA_V ? `${f}?v=${DATA_V}` : f);
+
 P.theme = readTheme();
 document.documentElement.dataset.theme = P.theme;
 
 // The map layers are optional decoration for a physics model, so they never
 // block the terrain. If they fail to load the sandbox still runs without roads.
 Promise.all([
-  loadTerrain('data/terrain.png', 'data/terrain.json'),
-  loadVectors('data/vectors.json').catch((err) => {
+  loadTerrain(dataUrl('data/terrain.png'), dataUrl('data/terrain.json')),
+  loadVectors(dataUrl('data/vectors.json')).catch((err) => {
     console.warn('map layers unavailable:', err.message);
     return null;
   })
@@ -164,11 +169,12 @@ Promise.all([
     onToggle: () => {
       const on = $('t-part').checked;
       setPlumeVisible(on);
+      setTrailsVisible($('t-trail').checked);
       if (on) for (const v of VOLCANOES) restartCloud(v);
       repaint();
     },
     onLayer: (layers, on) => { for (const id of layers) setVectorLayer(id, on); },
-    onPlaces: setPlacesVisible
+    onLabels: setLabelClasses
   });
   syncMode();
   syncTheme();

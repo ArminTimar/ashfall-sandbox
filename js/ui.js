@@ -449,8 +449,14 @@ export function bindUI(handlers) {
     b.addEventListener('click', () => handlers.onView(b.dataset.v));
   }
   $('t-cont').addEventListener('change', handlers.onToggle);
-  const places = $('t-places');
-  if (places) places.addEventListener('change', () => handlers.onPlaces(places.checked));
+  // Place-name groups. Each one is its own switch, so a map can show the big
+  // cities and the places near the volcano without every hamlet.
+  const labelBoxes = ['major', 'city', 'airport', 'town', 'village', 'district', 'near']
+    .map((id) => [id, $('t-lab-' + id)]).filter(([, box]) => box);
+  const labelCfg = () => Object.fromEntries(labelBoxes.map(([id, box]) => [id, box.checked]));
+  for (const [, box] of labelBoxes) box.addEventListener('change', () => handlers.onLabels(labelCfg()));
+  handlers.onLabels(labelCfg());
+  $('t-trail').addEventListener('change', handlers.onToggle);
   $('t-part').addEventListener('change', handlers.onToggle);
 
   for (const t of TOGGLES) {

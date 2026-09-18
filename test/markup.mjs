@@ -65,5 +65,25 @@ for (const k of helpKeys) check(k in HELP, `a help button asks for "${k}", which
 for (const k of Object.keys(HELP)) check(helpKeys.includes(k), `js/help.js defines "${k}" but no button uses it`);
 console.log(`  ${helpKeys.length} help buttons, ${Object.keys(HELP).length} entries`);
 
+// --- 6. the cache-busting stamp is current ---------------------------------
+//
+// GitHub Pages keeps files for 10 minutes, so after a release a browser can
+// load the new index.html together with cached modules from the previous
+// version and break on ids that no longer exist. tools/stamp.mjs tags every
+// module and the data files with the version, which makes them new URLs.
+{
+  const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+  const mods = readdirSync('js').filter((f) => f.endsWith('.js'));
+  check(html.includes(`<meta name="data-version" content="${version}">`),
+    `index.html is not stamped with v${version}, run: node tools/stamp.mjs`);
+  check(html.includes(`src="js/main.js?v=${version}"`),
+    `the module script tag is not stamped with v${version}, run: node tools/stamp.mjs`);
+  for (const m of mods) {
+    check(html.includes(`"./js/${m}": "./js/${m}?v=${version}"`),
+      `the import map is missing js/${m} at v${version}, run: node tools/stamp.mjs`);
+  }
+  console.log(`  stamped v${version}, import map covers ${mods.length} modules`);
+}
+
 console.log(fail ? `\n${fail} FAILED` : '\nOK - markup and module lookups agree');
 process.exit(fail ? 1 : 0);

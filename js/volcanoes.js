@@ -39,9 +39,9 @@ export const SOURCES = {
     cite: 'Tsuji, Nishizaka & Ohnishi (2020), Earth Planets Space 72, 104',
     url: 'https://doi.org/10.1186/s40623-020-01233-y'
   },
-  gvp1995kuju: {
-    cite: 'Global Volcanism Program, Kujusan report, December 1995',
-    url: 'https://doi.org/10.5479/si.GVP.BGVN199512-282120'
+  gsj1995kuju: {
+    cite: 'Geological Survey of Japan, Kuju: 4. Historic eruptions',
+    url: 'https://gbank.gsj.jp/volcano/Act_Vol/kuju/text/eng/exp-3e.html'
   },
   osm: {
     cite: 'OpenStreetMap summit node',
@@ -70,9 +70,9 @@ export const VOLCANOES = [
         p: { H: 1.5, logM: 6.5, phi: 2.5, sig: 1.5, suz: 2,
              dir: 270, spd: 8, top: 20, shear: 0, K: 1000, rho: 1000, dur: 600 },
         notes: [
-          ['Plume 1.5 km above the vent, the 27 June 2022 explosion', 'takishita2024'],
-          ['Mass 3 × 10⁶ kg, within the 0.9 to 5.1 × 10⁶ kg per explosion found for 2011 to 2015', 'oishi2018'],
-          ['Release low in the column (A = 2): most particles leave it 1 to 3 km up', 'takishita2024'],
+          ['Plume 1.5 km above the vent, the explosion of 27 June 2022', 'takishita2024'],
+          ['Mass 3 × 10⁶ kg, within the 0.9 to 5.1 × 10⁶ kg per explosion measured in 2011 to 2015, which are minimum estimates', 'oishi2018'],
+          ['Release low in the column (A = 2): most particles segregate at 1 to 3 km above sea level, far below the column top', 'takishita2024'],
           ['Grain size, wind and K assumed']
         ]
       },
@@ -106,7 +106,7 @@ export const VOLCANOES = [
         notes: [
           ['Plumes 6.4 to 7.3 km above the vent', 'maeno2014'],
           ['Mass 2 × 10¹⁰ kg, within 1.4 to 2.5 × 10¹⁰ kg for the two main explosions together', 'nakada2013'],
-          ['Wind from the NW, read from the SE dispersal', 'nakada2013'],
+          ['Wind from the NW, read from the dispersal to the SE', 'maeno2014'],
           ['Wind speeds, grain size and K assumed']
         ]
       }
@@ -124,12 +124,12 @@ export const VOLCANOES = [
         id: 'oct2016',
         name: '8 October 2016 phreatomagmatic explosion',
         p: { H: 10.7, logM: 8.8, phi: -0.5, sig: 2.3, suz: 4,
-             dir: 225, spd: 9, top: 30, shear: 25, K: 3000, rho: 1000, dur: 190 },
+             dir: 225, spd: 9, top: 30, shear: 45, K: 3000, rho: 1000, dur: 190 },
         notes: [
           ['Plume top 11.9 km above sea level, 10.7 km above the vent', 'tsuji2020'],
           ['Mass 6.3 × 10⁸ kg, within 6.0 to 6.5 × 10⁸ kg in total', 'tsuji2020'],
           ['Grain size from the dry-sieved total distribution, mean −0.5 φ, sorting 2.3 φ', 'tsuji2020'],
-          ['Wind from the SW low down and the WSW aloft, 2 to 39 m/s', 'tsuji2020'],
+          ['Wind from the SE to SW low down and from the west aloft, 2 to 39 m/s', 'tsuji2020'],
           ['Eruption 160 to 220 s long', 'tsuji2020'],
           ['Ash aggregation, important in this eruption, is not modelled. K assumed']
         ]
@@ -150,9 +150,10 @@ export const VOLCANOES = [
         p: { H: 1, logM: 7.35, phi: 3.5, sig: 1.5, suz: 2,
              dir: 80, spd: 8, top: 15, shear: 0, K: 1000, rho: 1000, dur: 3600 },
         notes: [
-          ['Plume about 1 km high', 'gvp1995kuju'],
-          ['2.2 × 10⁷ kg from 22,000 m³ of ash at 1,000 kg/m³, for the whole episode', 'gvp1995kuju'],
-          ['Wind from the east, as the ash fell to the west as far as Kumamoto', 'gvp1995kuju'],
+          ['Plume about 1,000 m high, on the evening of 11 October 1995', 'gsj1995kuju'],
+          ['Wind from the east: the ash fell to the west, reaching Kumamoto about 70 km away', 'gsj1995kuju'],
+          ['Mass 2.2 × 10⁷ kg, from a reported 2 × 10⁴ m³ of ash at 1,000 kg/m³. That volume is from secondary summaries of Japanese reports, not from a paper I could read, so treat it as a rough figure'],
+          ['The eruption was phreatic, turning phreatomagmatic', 'gsj1995kuju'],
           ['Wind speeds, grain size and K assumed']
         ]
       }

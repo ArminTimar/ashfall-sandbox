@@ -158,50 +158,55 @@ a { color: var(--accent-ink); text-underline-offset: 2px; }
 #scene canvas { display: block; width: 100%; height: 100%; }
 
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+/* Place labels. The dot marks the point; the text sits wherever it fits, so
+   scene.js can move a name aside instead of hiding it. --pin-scale shrinks the
+   text as the camera pulls back. */
+#labels { --pin-scale: 1; }
 .pin {
-  /* Anchored by its bottom centre, with the dot pinned there, so the marker
-     lands on the projected point whatever the length of the name. scene.js
-     positions it with a transform. */
   position: absolute; left: 0; top: 0;
-  padding-bottom: 7px;
-  font-size: 10px;
+  font-size: calc(10px * var(--pin-scale));
   font-weight: 600;
   line-height: 1.2;
   color: #cfd9e1;
   white-space: nowrap;
-  text-align: center;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.8);
   opacity: 0;
   transition: opacity 0.2s;
   will-change: transform;
 }
-.pin.on { opacity: 1; }
-.pin::before {
-  content: "";
-  position: absolute;
-  left: 50%; bottom: 0;
-  transform: translate(-50%, 50%);
+.pin-dot {
+  position: absolute; left: 0; top: 0;
   width: 4px; height: 4px;
   background: #cfd9e1;
   border-radius: 50%;
   box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 0.2s;
+  will-change: transform;
 }
-/* Cities over 50,000: larger, bright, ringed dot. */
-.pin.t1 { font-size: 12px; font-weight: 700; color: #f3f6f8; padding-bottom: 8px; }
-.pin.t1::before { width: 6px; height: 6px; background: #f3f6f8; box-shadow: 0 0 0 1.5px rgba(0,0,0,.6), 0 0 0 3px rgba(243,246,248,.35); }
-/* Other cities and towns: the default above. Districts: small and muted. */
-.pin.t3 { font-size: 9px; font-weight: 500; color: #9fb0bc; padding-bottom: 5px; }
-.pin.t3::before { width: 3px; height: 3px; background: #9fb0bc; box-shadow: none; }
-.pin.airport { font-size: 9.5px; font-style: italic; color: #a9c9dc; }
-.pin.airport::before { background: #a9c9dc; border-radius: 0; }
-.pin.vent, .pin.peak { color: #ffd27f; }
-.pin.vent::before, .pin.peak::before {
+.pin.on, .pin-dot.on { opacity: 1; }
+
+/* Cities over 300,000: larger, brighter, ringed dot. */
+.pin.major { font-size: calc(12.5px * var(--pin-scale)); font-weight: 700; color: #f3f6f8; }
+.pin-dot.major {
+  width: 6px; height: 6px; background: #f3f6f8;
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .6), 0 0 0 3px rgba(243, 246, 248, .35);
+}
+.pin.city { font-size: calc(11px * var(--pin-scale)); font-weight: 700; color: #e8edf1; }
+.pin-dot.city { width: 5px; height: 5px; background: #e8edf1; }
+/* Towns keep the defaults above. Villages and districts are small and quiet. */
+.pin.village, .pin.district { font-size: calc(9px * var(--pin-scale)); font-weight: 500; color: #9fb0bc; }
+.pin-dot.village, .pin-dot.district { width: 3px; height: 3px; background: #9fb0bc; box-shadow: none; }
+.pin.airport { font-size: calc(9.5px * var(--pin-scale)); font-style: italic; color: #a9c9dc; }
+.pin-dot.airport { background: #a9c9dc; border-radius: 0; }
+.pin.vent { color: #ffd27f; font-weight: 700; }
+.pin-dot.vent {
   width: 0; height: 0; background: none; border-radius: 0; box-shadow: none;
-  border-left: 4px solid transparent; border-right: 4px solid transparent;
-  border-bottom: 7px solid #ffd27f;
-  transform: translate(-50%, 30%);
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-bottom: 9px solid #ffd27f;
 }
-.pin.peak { font-size: 9.5px; color: #e9c47f; }
+.pin.vent.erupting { color: #ff9a5c; }
+.pin-dot.vent.erupting { border-bottom-color: #ff7a3c; }
 
 .legend {
   position: absolute; right: 12px; bottom: 11px;
@@ -548,16 +553,17 @@ ul.sources a { color: var(--accent-ink); }
 #scene[data-theme="light"] { background: #cfe2f1; }
 .panel:has(#scene[data-theme="light"]) { background: #cfe2f1; border-color: #b8cadb; }
 #scene[data-theme="light"] .pin { color: #1d2630; text-shadow: 0 0 3px #fff, 0 0 2px #fff, 0 1px 2px rgba(255,255,255,.9); }
-#scene[data-theme="light"] .pin:not(.vent)::before { background: #1d2630; box-shadow: 0 0 0 1.5px rgba(255,255,255,.8); }
-#scene[data-theme="light"] .pin.t1 { color: #0d1318; }
-#scene[data-theme="light"] .pin.t1::before { background: #0d1318; box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px rgba(13,19,24,.35); }
-#scene[data-theme="light"] .pin.t3 { color: #4a5663; }
-#scene[data-theme="light"] .pin.t3::before { background: #4a5663; }
+#scene[data-theme="light"] .pin-dot { background: #1d2630; box-shadow: 0 0 0 1.5px rgba(255,255,255,.8); }
+#scene[data-theme="light"] .pin.major, #scene[data-theme="light"] .pin.city { color: #0d1318; }
+#scene[data-theme="light"] .pin-dot.major { background: #0d1318; box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px rgba(13,19,24,.35); }
+#scene[data-theme="light"] .pin.village, #scene[data-theme="light"] .pin.district { color: #4a5663; }
+#scene[data-theme="light"] .pin-dot.village, #scene[data-theme="light"] .pin-dot.district { background: #4a5663; box-shadow: none; }
 #scene[data-theme="light"] .pin.airport { color: #234f78; }
-#scene[data-theme="light"] .pin.airport::before { background: #234f78; }
-#scene[data-theme="light"] .pin.vent, #scene[data-theme="light"] .pin.peak { color: #8a3a06; }
-#scene[data-theme="light"] .pin.vent::before { border-bottom-color: #a4480c; }
+#scene[data-theme="light"] .pin-dot.airport { background: #234f78; }
+#scene[data-theme="light"] .pin.vent { color: #8a3a06; }
+#scene[data-theme="light"] .pin-dot.vent { background: none; border-bottom-color: #a4480c; box-shadow: none; }
 #scene[data-theme="light"] .pin.vent.erupting { color: #c0360c; }
+#scene[data-theme="light"] .pin-dot.vent.erupting { border-bottom-color: #c0360c; }
 #scene[data-theme="light"] .badge,
 #scene[data-theme="light"] .ramp .lbl,
 #scene[data-theme="light"] .ramp .cap,
@@ -569,3 +575,11 @@ ul.sources a { color: var(--accent-ink); }
 #scene[data-theme="light"] .views button { background: rgba(255,255,255,.8); border-color: #9fb3c6; color: #2c3a47; }
 #scene[data-theme="light"] .views button:hover { color: #000; border-color: #56718a; }
 #scene[data-theme="light"] #loading { background: #cfe2f1; color: #33414e; }
+
+/* Place-name switches, one per size group. */
+.labels-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; margin-top: 4px;
+}
+.labels-grid label { display: flex; gap: 6px; align-items: center; font-size: 0.74rem; color: var(--ink-2); cursor: pointer; }
+.labels-grid input { accent-color: var(--accent); width: 13px; height: 13px; }
+.labels-grid .wide { grid-column: 1 / -1; }

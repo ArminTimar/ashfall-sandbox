@@ -1,20 +1,21 @@
-// three.js scene: level-of-detail terrain, sea and sky, particle clouds,
-// camera controls and HTML labels.
+// three.js scene: terrain, sea and sky, particle clouds, camera controls and
+// HTML labels.
 //
 // Axes: +x east, +y up, +z south, in kilometres of EPSG:6670. So a point at
 // easting E and northing N metres sits at (E / 1000, height, -N / 1000).
 
 import { GRID, P, LANDMARKS } from './params.js';
 import { elevAtSmooth } from './terrain.js';
-import { NP_TOTAL, stepCloud } from './particles.js';
+import { NP_TOTAL, TRAIL_N, stepCloud, setTrails } from './particles.js';
 import { getCanvas, PALETTE } from './texture.js';
-import { initTerrainMesh, updateTerrainLOD, invalidateTerrain, terrainStats } from './terrainmesh.js';
-import { buildVectors, updateVectorHeights, updateVectorView, setLayerVisible, setVectorTheme } from './vectors.js';
+import { initTerrainMesh, terrainStats } from './terrainmesh.js';
+import { buildVectors, updateVectorView, setLayerVisible, setVectorTheme } from './vectors.js';
 import { VOLCANOES } from './volcanoes.js';
 
 // Module-private and assigned in initScene. Reach them through the functions
 // below, so tools/bundle.mjs never has to deal with reassigned exports.
-let scene, cam, renderer, tex, points, sea, sky, ambient, keyLight, fillLight;
+let scene, cam, renderer, tex, points, sea, sky, ambient, keyLight, fillLight, world;
+let trails, tgeo, tpos, tcol;
 let pgeo, ppos, pcol, host;
 const labelEls = [];
 const _v = new THREE.Vector3();
@@ -26,6 +27,8 @@ let goal = null;
 let onFocusChange = () => {};
 
 const DIST_MIN = 2, DIST_MAX = 620;
+// Two vertices per segment, one segment between successive trail points.
+const TRAIL_CAP = 800 * (TRAIL_N - 1) * 2;
 
 function mapCentre() {
   return { x: (GRID.west + GRID.east) / 2000, z: -(GRID.south + GRID.north) / 2000 };
@@ -48,13 +51,19 @@ export function initScene(hostEl, opts = {}) {
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
+  // Everything that lives on the map goes in one group whose vertical scale
+  // is the exaggeration. Heights are stored in real kilometres, so moving that
+  // slider is a scale change and nothing is rebuilt.
+  world = new THREE.Group();
+  scene.add(world);
+
   const terrainMat = new THREE.MeshLambertMaterial({
     map: tex, side: THREE.DoubleSide,
     // Push the ground a hair away from the camera so draped lines win the
     // depth test against the surface they follow.
     polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
   });
-  initTerrainMesh(scene, terrainMat);
+  initTerrainMesh(world, terrainMat);
 
   // Sea to the horizon. It sits just below sea level so the terrain's own sea
   // cells, which carry any ash that fell on water, draw on top of it.
@@ -62,8 +71,8 @@ export function initScene(hostEl, opts = {}) {
   sea = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000),
     new THREE.MeshLambertMaterial({ color: 0x122029 }));
   sea.rotation.x = -Math.PI / 2;
-  sea.position.set(c.x, -0.01, c.z);
-  scene.add(sea);
+  sea.position.set(c.x, -0.003, c.z);
+  world.add(sea);
 
   // Sky: a gradient dome that moves with the camera and ignores fog.
   sky = new THREE.Mesh(new THREE.SphereGeometry(4000, 32, 16), new THREE.ShaderMaterial({
@@ -96,12 +105,25 @@ export function initScene(hostEl, opts = {}) {
     sizeAttenuation: true, depthWrite: false
   }));
   points.frustumCulled = false;
-  scene.add(points);
+  world.add(points);
+
+  // Flight paths, drawn as one line-segment soup that is rewritten each frame.
+  tgeo = new THREE.BufferGeometry();
+  tpos = new Float32Array(TRAIL_CAP * 3);
+  tcol = new Float32Array(TRAIL_CAP * 3);
+  tgeo.setAttribute('position', new THREE.BufferAttribute(tpos, 3));
+  tgeo.setAttribute('color', new THREE.BufferAttribute(tcol, 3));
+  trails = new THREE.LineSegments(tgeo, new THREE.LineBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false
+  }));
+  trails.frustumCulled = false;
+  world.add(trails);
 
   const v = VOLCANOES.find((x) => x.id === orbit.focus);
   if (v) { orbit.tx = v.E / 1000; orbit.tz = -v.N / 1000; }
 
   applyTheme(P.theme);
+  applyExaggeration();
   bindControls();
   buildLabels();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureLabels);
@@ -132,13 +154,17 @@ export function applyTheme(theme) {
   pm.blending = dark ? THREE.AdditiveBlending : THREE.NormalBlending;
   pm.opacity = dark ? 0.72 : 0.85;
   pm.needsUpdate = true;
+  const tm = trails.material;
+  tm.blending = dark ? THREE.AdditiveBlending : THREE.NormalBlending;
+  tm.opacity = dark ? 0.5 : 0.4;
+  tm.needsUpdate = true;
   setVectorTheme(theme);
   host.dataset.theme = theme;
 }
 
+/** Vertical exaggeration is the vertical scale of the world group. */
 export function applyExaggeration() {
-  invalidateTerrain();
-  updateVectorHeights();
+  world.scale.y = P.ex;
 }
 
 export function markTextureDirty() { if (tex) tex.needsUpdate = true; }
@@ -146,12 +172,23 @@ export function markTextureDirty() { if (tex) tex.needsUpdate = true; }
 /** Add the OpenStreetMap layers and settlement labels. */
 export function addVectors(doc) {
   addPlaceLabels(doc.places);
-  return buildVectors(doc, scene);
+  return buildVectors(doc, world);
 }
 
 export function setVectorLayer(id, on) { setLayerVisible(id, on); }
 
-export function setPlumeVisible(v) { if (points) points.visible = v; }
+export function setPlumeVisible(v) {
+  if (points) points.visible = v;
+  if (trails) trails.visible = v && trailsWanted;
+}
+
+let trailsWanted = true;
+/** Show or hide the flight paths behind the particles. */
+export function setTrailsVisible(v) {
+  trailsWanted = !!v;
+  setTrails(trailsWanted);
+  if (trails) trails.visible = points.visible && trailsWanted;
+}
 
 // ---------------------------------------------------------------------------
 // Camera
@@ -303,28 +340,58 @@ function updateCam(dt) {
 // Labels
 // ---------------------------------------------------------------------------
 
-// Ranks, most important first. When two labels overlap on screen the lower
-// rank is hidden. maxDist hides a rank entirely when the camera is farther
-// than that many km, so small places only appear when zoomed in.
-const RANK = {
-  vent:    { rank: 0, maxDist: Infinity, lift: 0.4 },
-  t1:      { rank: 1, maxDist: Infinity, lift: 0.15 },
-  airport: { rank: 2, maxDist: 220, lift: 0.15 },
-  t2:      { rank: 3, maxDist: 260, lift: 0.15 },
-  t3:      { rank: 4, maxDist: 70, lift: 0.15 }
-};
-let showPlaces = true;
+// Every label is a dot at the projected point plus a text box that can move
+// around it. Labels never overlap: a name that cannot find a free spot beside
+// its dot is hidden, and the text shrinks as the camera pulls back.
+//
+// Places are grouped by size. Each group has its own switch and its own
+// distance beyond which it disappears, so zooming out leaves only the largest
+// cities. Places near a volcano can be kept regardless of their size, because
+// they are the ones an ashfall map is about.
+
+export const NEAR_KM = 30;
+
+export const LABEL_CLASSES = [
+  { id: 'major',    name: 'Major cities, 300k+', rank: 1, maxDist: Infinity, on: true },
+  { id: 'city',     name: 'Cities, 100k+',       rank: 2, maxDist: 340, on: true },
+  { id: 'airport',  name: 'Airports',            rank: 3, maxDist: 200, on: true },
+  { id: 'town',     name: 'Towns, 10k+',         rank: 4, maxDist: 150, on: false },
+  { id: 'village',  name: 'Villages',            rank: 5, maxDist: 70,  on: false },
+  { id: 'district', name: 'Districts',           rank: 6, maxDist: 45,  on: false }
+];
+const CLASS = Object.fromEntries(LABEL_CLASSES.map((c) => [c.id, c]));
+const VENT = { rank: 0, maxDist: Infinity, on: true };
+// Near a volcano, small places stay on and stay visible from farther away.
+let showNear = true;
+const NEAR_DIST = 160;
+
+/** Which size group a place belongs to. */
+function placeClass(p) {
+  if (p.tier === 3) return 'district';
+  const pop = p.pop || 0;
+  if (pop >= 300000) return 'major';
+  if (pop >= 100000) return 'city';
+  if (pop >= 10000) return 'town';
+  return 'village';
+}
 
 function addLabel(wrap, name, E, N, cls, extra = {}) {
+  const dot = document.createElement('i');
+  dot.className = 'pin-dot ' + cls;
+  wrap.appendChild(dot);
   const el = document.createElement('div');
   el.className = 'pin ' + cls;
   el.textContent = name;
   wrap.appendChild(el);
-  labelEls.push(Object.assign({ el, E, N, cls, w: 0, h: 0, on: undefined }, RANK[cls], extra));
+  const spec = cls === 'vent' ? VENT : CLASS[cls];
+  labelEls.push(Object.assign({
+    el, dot, E, N, cls, rank: spec.rank, maxDist: spec.maxDist,
+    lift: cls === 'vent' ? 0.4 : 0.05, near: false, w: 0, h: 0, on: undefined
+  }, extra));
 }
 
 function buildLabels() {
-  const wrap = document.getElementById('labels');
+  const wrap = labelWrap = document.getElementById('labels');
   for (const v of VOLCANOES) addLabel(wrap, v.name, v.E, v.N, 'vent', { volcano: v });
   for (const a of LANDMARKS) addLabel(wrap, a.n, a.E, a.N, 'airport');
   sortLabels();
@@ -333,30 +400,66 @@ function buildLabels() {
 
 function addPlaceLabels(places) {
   const wrap = document.getElementById('labels');
-  for (const p of places || []) addLabel(wrap, p.n, p.x * 1000, p.y * 1000, 't' + p.tier);
+  for (const p of places || []) {
+    const E = p.x * 1000, N = p.y * 1000;
+    const near = VOLCANOES.some((v) => Math.hypot(v.E - E, v.N - N) < NEAR_KM * 1000);
+    addLabel(wrap, p.n, E, N, placeClass(p), { near, pop: p.pop || 0 });
+  }
   sortLabels();
   measureLabels();
 }
 
-function sortLabels() { labelEls.sort((a, b) => a.rank - b.rank); }
+// Vents first, then by group, then by population, so the biggest place wins a
+// contested spot.
+function sortLabels() {
+  labelEls.sort((a, b) => a.rank - b.rank || (b.pop || 0) - (a.pop || 0));
+}
 
 function measureLabels() {
   for (const L of labelEls) { L.w = L.el.offsetWidth; L.h = L.el.offsetHeight; }
 }
 
-export function setPlacesVisible(on) { showPlaces = !!on; }
+/** Turn place groups on or off: { major: true, town: false, near: true, ... } */
+export function setLabelClasses(cfg) {
+  for (const c of LABEL_CLASSES) if (c.id in cfg) c.on = !!cfg[c.id];
+  if ('near' in cfg) showNear = !!cfg.near;
+}
 
 /** Mark which volcanoes are erupting, for the label style. */
 export function refreshVentLabels() {
   for (const L of labelEls) if (L.volcano) L.el.classList.toggle('erupting', !!L.volcano.erupting);
 }
 
+// Where the text may sit relative to its dot: above it first, then beside it,
+// then below. dx and dy are pixels, ax and ay are percentages of the text box.
+const SPOTS = [
+  [0, -7, -50, -100],
+  [9, 0, 0, -50],
+  [-9, 0, -100, -50],
+  [0, 9, -50, 0],
+  [9, -7, 0, -100],
+  [-9, -7, -100, -100]
+];
+
 const placed = [];
+let fontScale = 0;
+// The scale lives on the label layer itself: #labels declares the variable, so
+// setting it on an ancestor would be shadowed and nothing would change size.
+let labelWrap = null;
+
 function updateLabels() {
   const w = host.clientWidth, h = host.clientHeight;
+  // Smaller text when zoomed out, which also leaves room for more names.
+  const wantScale = Math.max(0.72, Math.min(1, 1.12 - orbit.dist / 900));
+  if (Math.abs(wantScale - fontScale) > 0.02) {
+    fontScale = wantScale;
+    if (labelWrap) labelWrap.style.setProperty('--pin-scale', wantScale.toFixed(2));
+  }
   placed.length = 0;
   for (const L of labelEls) {
-    let vis = orbit.dist <= L.maxDist && (showPlaces || L.rank === 0);
+    const spec = L.cls === 'vent' ? VENT : CLASS[L.cls];
+    const near = showNear && L.near;
+    let vis = (spec.on || near) && orbit.dist <= (near ? Math.max(spec.maxDist, NEAR_DIST) : spec.maxDist);
     let sx = 0, sy = 0;
     if (vis) {
       const e = (elevAtSmooth(L.E, L.N) / 1000) * P.ex;
@@ -364,15 +467,30 @@ function updateLabels() {
       vis = _v.z < 1 && Math.abs(_v.x) < 1.02 && Math.abs(_v.y) < 1.02;
       sx = (_v.x * 0.5 + 0.5) * w; sy = (-_v.y * 0.5 + 0.5) * h;
     }
+    let spot = null;
     if (vis) {
-      const x0 = sx - L.w / 2 - 3, x1 = sx + L.w / 2 + 3, y0 = sy - L.h - 1, y1 = sy + 3;
-      for (const r of placed) {
-        if (x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]) { vis = L.rank <= 1; break; }
+      const lw = L.w * fontScale, lh = L.h * fontScale;
+      for (const [dx, dy, ax, ay] of SPOTS) {
+        const x0 = sx + dx + (lw * ax) / 100 - 2, y0 = sy + dy + (lh * ay) / 100 - 1;
+        const x1 = x0 + lw + 4, y1 = y0 + lh + 2;
+        let clash = false;
+        for (const r of placed) {
+          if (x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]) { clash = true; break; }
+        }
+        if (!clash) { spot = [dx, dy, ax, ay]; placed.push([x0, y0, x1, y1]); break; }
       }
-      if (vis) placed.push([x0, y0, x1, y1]);
+      vis = !!spot;
     }
-    if (L.on !== vis) { L.el.classList.toggle('on', vis); L.on = vis; }
-    if (vis) L.el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -100%)`;
+    if (L.on !== vis) {
+      L.el.classList.toggle('on', vis);
+      L.dot.classList.toggle('on', vis);
+      L.on = vis;
+    }
+    if (vis) {
+      L.dot.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -50%)`;
+      L.el.style.transform = `translate(${(sx + spot[0]).toFixed(1)}px, ${(sy + spot[1]).toFixed(1)}px) `
+        + `translate(${spot[2]}%, ${spot[3]}%)`;
+    }
   }
 }
 
@@ -410,7 +528,6 @@ export function renderFrame(dt, opts) {
     if (goal) goal.az += dt * 0.09;     // keep turning while flying somewhere
   }
   updateCam(dt);
-  updateTerrainLOD(cam, host.clientHeight);
   updateVectorView(orbit.dist);
   if (points.visible) {
     let slot = 0;
@@ -422,9 +539,46 @@ export function renderFrame(dt, opts) {
     pgeo.setDrawRange(0, slot);
     pgeo.attributes.position.needsUpdate = true;
     pgeo.attributes.color.needsUpdate = true;
+    if (trails.visible) drawTrails();
   }
   updateLabels();
   renderer.render(scene, cam);
+}
+
+/**
+ * Rewrite the flight paths. Each particle's recorded track becomes a run of
+ * segments that fade towards the oldest point, so the head of the trail is the
+ * particle itself.
+ */
+function drawTrails() {
+  const dark = P.theme === 'dark';
+  let k = 0;
+  for (const v of VOLCANOES) {
+    if (!v.erupting || !v.cloud) continue;
+    for (const q of v.cloud.parts) {
+      if (!q.tr || q.trN < 2) continue;
+      if (k + (q.trN - 1) * 6 > TRAIL_CAP * 3) return finishTrails(k);
+      for (let i = 1; i < q.trN; i++) {
+        const a = (i - 1) * 3, b = i * 3;
+        tpos[k] = q.tr[a]; tpos[k + 1] = q.tr[a + 1]; tpos[k + 2] = q.tr[a + 2];
+        tpos[k + 3] = q.tr[b]; tpos[k + 4] = q.tr[b + 1]; tpos[k + 5] = q.tr[b + 2];
+        // Older points are dimmer. In the light theme the trail darkens
+        // instead, since it is drawn over a bright sky.
+        const f0 = (i - 1) / q.trN, f1 = i / q.trN;
+        const c0 = dark ? f0 : 1 - 0.55 * f0, c1 = dark ? f1 : 1 - 0.55 * f1;
+        tcol[k] = c0 * (dark ? 0.85 : 0.42); tcol[k + 1] = c0 * (dark ? 0.45 : 0.42); tcol[k + 2] = c0 * (dark ? 0.25 : 0.44);
+        tcol[k + 3] = c1 * (dark ? 0.85 : 0.42); tcol[k + 4] = c1 * (dark ? 0.45 : 0.42); tcol[k + 5] = c1 * (dark ? 0.25 : 0.44);
+        k += 6;
+      }
+    }
+  }
+  finishTrails(k);
+}
+
+function finishTrails(k) {
+  tgeo.setDrawRange(0, k / 3);
+  tgeo.attributes.position.needsUpdate = true;
+  tgeo.attributes.color.needsUpdate = true;
 }
 
 /** The WebGL canvas, for saving images. */
@@ -433,3 +587,6 @@ export function getRenderCanvas() { return renderer.domElement; }
 export function debugStats() {
   return { orbit: Object.assign({}, orbit), terrain: terrainStats(), labels: labelEls.filter((l) => l.on).length };
 }
+
+/** Scene graph handles, for the dev console. */
+export function sceneHandles() { return { scene, cam, world, points }; }

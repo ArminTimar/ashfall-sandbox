@@ -117,7 +117,7 @@ a historical eruption of about the same size.
 | Sakurajima | Minamidake crater, 1,000 m | Routine Vulcanian explosion. Taishō 1914, subPlinian phase |
 | Shinmoedake | summit crater, 1,421 m | 26 and 27 January 2011 subplinian explosions |
 | Aso | Nakadake first crater, about 1,200 m | 8 October 2016 phreatomagmatic explosion |
-| Kujū | Hosshōzan north flank, about 1,500 m | October 1995 phreatic eruption |
+| Kujū | Hosshōzan north flank, about 1,500 m | 11 October 1995 phreatic eruption |
 | Unzen | Heisei-shinzan, 1,483 m | none yet |
 | Kaimondake | summit, 924 m | none yet |
 
@@ -212,6 +212,18 @@ deposit gives the cloud through τ.
 The number of particles scales with erupted mass: about 250 at 10⁶ kg, 800 at
 2 × 10⁸ kg and 3,100 at 10¹¹ kg, up to 6,000.
 
+**Flight paths.** Up to 120 particles per volcano keep their last ten positions
+and draw them as a fading trail, which shows the arc from the column to the
+ground. Only a sample does this because WebGL line segments are slow on
+integrated graphics: drawing 17,000 of them cost 77 ms a frame, against 3 ms
+for the few hundred drawn now.
+
+Ash really does stay up a long time. Measured over the presets, the median
+particle is in the air 16 to 53 model minutes, and the finest tail drifts for
+hours before landing or leaving the map. Nothing hangs there forever: in five
+model hours a steady cloud turns over two to ten times. Playback defaults to
+120 times real speed, so a typical flight takes about ten seconds to watch.
+
 There are two modes.
 
 **Continuous** is a cloud that has been erupting long enough to reach a steady
@@ -283,8 +295,8 @@ Satsuma-Iōjima, that every vent is on land within 350 m of its DEM height, and
 that every readout place exists.
 
 **`test/markup.mjs`** and **`test/inputs.mjs`** check that the page and the
-modules agree on element ids and help entries, and that typed values and units
-are read correctly.
+modules agree on element ids and help entries, that typed values and units are
+read correctly, and that the cache-busting stamp matches the version.
 
 ## Known limitations
 
@@ -391,9 +403,29 @@ tools/build_terrain.py  rebuilds data/terrain.png from GSI tiles
 tools/build_vectors.py  rebuilds data/vectors.json from OpenStreetMap and GeoNames
 requirements.txt        python packages for build_terrain.py (see below)
 tools/serve.mjs         static server with no dependencies
+tools/stamp.mjs         tags modules and data with the version, see below
 tools/bundle.mjs        flattens everything into dist/index.html
 test/                   node test scripts
 ```
+
+## Releasing
+
+GitHub Pages tells browsers to keep files for ten minutes. After a release a
+browser can therefore load the new `index.html` alongside modules it cached
+from the previous version, and the page breaks on ids that no longer exist.
+That happened once, between v0.4.0 and v0.5.0.
+
+So before a release, bump the version in `package.json` and run:
+
+```bash
+node tools/stamp.mjs
+```
+
+It writes an import map into `index.html` that points every module at
+`js/<name>.js?v=<version>`, and a `data-version` meta tag that `main.js` uses
+for the data files. New version, new URLs, nothing stale reused. The source
+files keep plain relative imports, so the tests and the bundler are unaffected,
+and `npm test` fails if the stamp is missing or out of date.
 
 `tools/bundle.mjs` rewrites each module as a function that returns its
 exports, then checks every imported name against what the exporting module
@@ -436,11 +468,20 @@ the real one. The tiles are public and need no key.
 To move the map, change the rectangle at the top of `tools/build_terrain.py`
 and rebuild `data/vectors.json` as well. `npm test` checks that the two agree.
 
-On screen the grid is cut into 64 × 64 cell chunks. Each chunk is drawn with a
-vertex every 1, 2, 4 ... 64 cells depending on its distance from the camera,
-aiming for about six pixels per triangle, with a skirt along its edges to hide
-gaps between chunks at different detail. The whole island seen from far away
-takes about 17,000 vertices, and a close oblique view about 300,000.
+On screen the whole grid is built once, at full resolution, about 1.6 million
+vertices. It is cut into 64 × 64 cell chunks only so the renderer can skip the
+ones that are off screen, and chunks with no land in them are drawn coarsely
+since they are flat.
+
+An earlier version chose a vertex spacing per chunk from the camera distance.
+That looked fine inland and was wrong on every coast: sampling every 8th or
+16th cell drops the cells that carry a coastline, so coastal land sank under
+the sea plane and the shore changed shape whenever the camera moved. Drawing
+every cell all the time costs about 8 ms a frame on Intel integrated graphics,
+which is cheaper than the bugs.
+
+Heights are stored in real kilometres and the vertical exaggeration is a scale
+applied to the whole scene, so that slider never rebuilds anything.
 
 ## Map layers and places
 
@@ -456,24 +497,36 @@ terrain is drawn with fewer vertices than the roads follow, so the lines are
 lifted in the shader by an amount that grows with camera distance. Secondary
 roads only show within 90 km of the camera.
 
-Places come in three tiers, drawn with different markers:
+Place names are grouped by size, and each group has its own switch:
 
-| Tier | What | Source | Shown within |
+| Group | What | Shown within | On by default |
 | --- | --- | --- | --- |
-| 1 | cities of 100,000 people or more (25) | OpenStreetMap `place=city` | any distance |
-| 2 | other cities, towns and villages (195) | OpenStreetMap `place=city`, `town`, `village` | 260 km |
-| 3 | districts and former towns (41) | OpenStreetMap `place=suburb` with an English name, and GeoNames | 70 km |
+| Major cities | 300,000 people or more | any distance | yes |
+| Cities | 100,000 or more | 340 km | yes |
+| Airports | the nine in the window | 200 km | yes |
+| Towns | 10,000 or more | 150 km | no |
+| Villages | under 10,000 | 70 km | no |
+| Districts | city wards and former towns | 45 km | no |
 
-Japanese municipalities were merged heavily in the 2000s, so many towns people
-still know by name, such as Kajiki, are not tagged as places in OpenStreetMap.
+Anything within 30 km of a volcano is shown whatever its size, out to 160 km
+of camera distance, since those are the places an ashfall map is about. That
+is a switch too.
+
+Labels never overlap. Each name tries six positions around its dot, above
+first and then beside or below it, and is hidden if none of them is free. The
+text also shrinks from 10 px to about 7 px as the camera pulls back. A label's
+dot stays on its place even when the name moves aside.
+
+The data behind the groups is OpenStreetMap `place=city`, `town`, `village` and
+`suburb`, plus GeoNames. Japanese municipalities were merged heavily in the
+2000s, so many towns people still know by name, such as Kajiki, are not tagged
+as places in OpenStreetMap.
 GeoNames fills some of those gaps. Its positions are rougher, so a GeoNames
 place is only used when no OpenStreetMap place is within 2.5 km and it isn't a
 copy of a nearby municipality.
 
-When labels would overlap on screen, the less important one is hidden, so
-zooming in shows more names. Volcano names and tier 1 cities are always shown.
-Airports and volcanoes are defined by longitude and latitude in
-`js/params.js` and `js/volcanoes.js`, with their grid positions calculated.
+Airports and volcanoes are defined by longitude and latitude in `js/params.js`
+and `js/volcanoes.js`, with their grid positions calculated.
 
 ## References
 
@@ -492,7 +545,7 @@ Airports and volcanoes are defined by longitude and latitude in
 - Takishita, K., Poulidis, A.P., Iguchi, M. (2024). Tephra segregation profiles based on disdrometer observations and tephra dispersal modeling: Vulcanian eruptions of Sakurajima volcano, Japan. *Earth Planets Space* 76, 29. <https://doi.org/10.1186/s40623-023-01952-y>
 - Todde, A., Cioni, R., Pistolesi, M., Geshi, N., Bonadonna, C. (2017). The 1914 Taisho eruption of Sakurajima volcano: stratigraphy and dynamics of the largest explosive event in Japan during the twentieth century. *Bull. Volcanol.* 79, 72. <https://doi.org/10.1007/s00445-017-1154-4>
 - Tsuji, T., Nishizaka, N., Ohnishi, K. (2020). Influence of particle aggregation on the tephra dispersal and sedimentation from the October 8, 2016, eruption of Aso volcano. *Earth Planets Space* 72, 104. <https://doi.org/10.1186/s40623-020-01233-y>
-- Global Volcanism Program (1995). Report on Kujusan (Japan). *Bulletin of the Global Volcanism Network* 20:12. <https://doi.org/10.5479/si.GVP.BGVN199512-282120>
+- Geological Survey of Japan. Kuju: 4. Historic eruptions. <https://gbank.gsj.jp/volcano/Act_Vol/kuju/text/eng/exp-3e.html>
 - Woodhouse, M.J. et al. (2013). Interaction between volcanic plumes and wind during the 2010 Eyjafjallajökull eruption, Iceland. *J. Geophys. Res. Solid Earth* 118, 92–109.
 
 ## Licence

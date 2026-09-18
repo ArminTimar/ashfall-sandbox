@@ -111,7 +111,7 @@ export function updateVectorHeights() {
     const { xs, ys, pos } = B;
     for (let i = 0; i < xs.length; i++) {
       pos[i * 3] = xs[i];
-      pos[i * 3 + 1] = (elevAtSmooth(xs[i] * 1000, ys[i] * 1000) / 1000) * P.ex;
+      pos[i * 3 + 1] = elevAtSmooth(xs[i] * 1000, ys[i] * 1000) / 1000;
       pos[i * 3 + 2] = -ys[i];
     }
     B.obj.geometry.attributes.position.needsUpdate = true;
@@ -122,7 +122,9 @@ export function updateVectorHeights() {
 /** Per-frame: lift with camera distance, hide detail layers when far away. */
 export function updateVectorView(camDist) {
   for (const B of built.values()) {
-    B.uniforms.uLift.value = (B.spec.lift + camDist * 0.0012) * Math.max(1, P.ex / 3);
+    // The lift is a distance on screen, so it is divided by the vertical
+    // scale the world group applies.
+    B.uniforms.uLift.value = (B.spec.lift + camDist * 0.0008) / Math.max(P.ex, 0.01);
     B.obj.visible = B.on && camDist <= B.spec.maxDist;
   }
 }
