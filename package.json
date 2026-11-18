@@ -1,6 +1,6 @@
 {
   "name": "ashfall-sandbox",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Interactive tephra advection-diffusion model for the volcanoes of Kyushu on real GSI terrain",
   "type": "module",
   "license": "MIT",
