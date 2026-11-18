@@ -177,6 +177,7 @@ above 1% of the peak within about 6%.
 | Atmosphere | Exponential density profile, 1.225 kg/m³ at sea level, scale height 8200 m, viscosity 1.8 × 10⁻⁵ Pa·s. Tephra2 has the same scale height with 1.293 kg/m³ and 1.8325 × 10⁻⁵ Pa·s, which makes its grains settle 2 to 3% slower |
 | Column | Suzuki distribution over release height, `(1 − ζ)·exp(A(ζ − 1))`, the form Takishita et al. (2024) give as their equation 1 with *k* for *A*. Release peaks at 1 − 1/A of the plume height. Tephra2 itself offers uniform, log-normal and beta profiles instead |
 | Grain size | Gaussian in φ, 12 bins from φ −5 (32 mm) to φ 5 (31 µm), renormalised |
+| Aggregation | Optional, on by default. Cornell et al. (1983) fractions as in FALL3D, into one class of 300 µm aggregates at 350 kg/m³ |
 | Wind | Speed interpolated between the 2 km and 12 km values, direction turning evenly by the shear angle over the same range. One profile per volcano |
 | Source consistency | Mastin et al. (2009), `H = 2.00·V̇^0.241`, inverted to flag a plume height and erupted mass that can't belong to the same eruption |
 | Coordinates | JGD2011 / Japan Plane Rectangular CS II (EPSG:6670), transverse Mercator on GRS80, checked against pyproj to under 0.1 mm |
@@ -221,10 +222,39 @@ Kujū 1995 is 10,000 to 1 in mass, and used to be 7.6 to 1 in particles.
 grain size mix, within a point per bin. What is in the air at any moment is a
 different distribution, and it should be: in a steady state each size is
 present in proportion to how much is released times how long it stays up, and
-fine ash stays up far longer. For the Kujū preset the finest bin is 20% of what
-is released and 58% of what is in the sky. That is the physics, not a display
-choice, and a seeded cloud matches a cloud run to equilibrium within a few
-points.
+fine ash stays up far longer. With aggregation switched off, the finest bin of
+the Kujū preset is 20% of what is released and 58% of what is in the sky. That
+is the physics, not a display choice, and a seeded cloud matches a cloud run to
+equilibrium within a few points.
+
+### Aggregation
+
+Fine ash sticks together in the plume and falls as clusters far faster than
+its single grains. Every eruption has a switch for this, on by default. It uses
+the scheme of Cornell et al. (1983) as FALL3D implements it
+(`Sources/mod_Grn.F90`, case `CORNELL`): half of the ash between φ 3 and 4, three
+quarters between φ 4 and 5 and 90% finer than φ 5 falls as aggregates. FALL3D
+leaves the aggregate size and density to the user. This uses 300 µm and
+350 kg/m³, the first aggregate class in FALL3D's input template; Folch et al.
+(2020) give 100 to 300 µm as the usual size.
+
+The deposit moves that mass into one extra size bin, and each particle joins an
+aggregate with the same probability, so the two still agree.
+`test/particles.mjs` checks both: the share of aggregated particles has to match
+the aggregate bin within 3 points, and the landed particles have to match the
+deposit ring by ring.
+
+Share of the erupted mass that lands beyond 100 km:
+
+| Preset | Without aggregation | With it |
+| --- | --- | --- |
+| Sakurajima, routine Vulcanian | 8.5% | 2.1% |
+| Kujū 1995 | 19% | 4.8% |
+| Taishō 1914 | 23% | 26% |
+
+The small, fine-grained eruptions change most. Taishō barely moves because
+little of its ash is finer than φ 3, and the aggregates it does form fall from
+high enough to drift further than they settle.
 
 Ash stays up a long time. Measured over the presets, the median particle is in
 the air 16 to 53 model minutes, and the finest tail drifts for hours before
@@ -354,9 +384,12 @@ These matter if you compare the sandbox with anything real.
   with an even turn in direction between them. Deposits from eruptions lasting
   hours record the wind changing, and a real sounding has more structure than
   two levels can show.
-- **No ash aggregation.** Fine ash clumps together and falls like much larger
-  particles, which can make a second thickness maximum tens of kilometres
-  downwind.
+- **Aggregation is one fixed recipe.** The Cornell fractions and one aggregate
+  size are applied to every eruption. Real aggregation depends on moisture,
+  charge and particle concentration, and differs a lot between eruptions: it was
+  18 wt% of the deposit at Aso in 2016 (Tsuji et al., 2020). The single
+  aggregate class also cannot make the second thickness maximum some deposits
+  show tens of kilometres downwind.
 - **Terrain is scenery.** The deposit is draped over the elevation model and
   every particle in the deposit calculation falls to sea level. Tephra2 adjusts
   fall time for the ground height at each point. Doing that here would mean
@@ -369,9 +402,9 @@ These matter if you compare the sandbox with anything real.
 - **Map edge.** Ash blown out to sea past the map edge is gone. The readout
   reports how much of the selected volcano's erupted mass landed on the map,
   which for the Taishō preset is about three quarters.
-- **The far tail is too heavy.** With no aggregation and Fickian diffusion
-  only, the finest ash drifts further than it would in reality, which puts more
-  mass at the edges of the map than a real deposit would have.
+- **The far tail may still be heavy.** With Fickian diffusion only, and the
+  part of the fine ash that does not aggregate drifting for hours, more mass can
+  reach the edges of the map than a real deposit would have.
 - **Independent eruptions.** Each volcano has its own wind, so two eruptions on
   the same day can have contradictory winds. That is deliberate for now.
 - **Presets are partly assumed.** See the notes under each preset for which
@@ -590,8 +623,10 @@ and `js/volcanoes.js`, with their grid positions calculated.
 - Bonadonna, C., Phillips, J.C. (2003). Sedimentation from strong volcanic plumes. *J. Geophys. Res.* 108(B7), 2340.
 - Blong, R.J., Grasso, P., Jenkins, S.F. et al. (2017). Estimating building vulnerability to volcanic ash fall for insurance and other purposes. *J. Appl. Volcanol.* 6, 2. <https://doi.org/10.1186/s13617-017-0054-9>
 - Connor, L.J., Connor, C.B. Tephra2. <https://github.com/geoscience-community-codes/tephra2>
+- Cornell, W., Carey, S., Sigurdsson, H. (1983). Computer simulation of transport and deposition of the Campanian Y-5 ash. *J. Volcanol. Geotherm. Res.* 17, 89–109. <https://doi.org/10.1016/0377-0273(83)90063-X> Cited here through its implementation in FALL3D; the paper itself was not read.
 - Degruyter, W., Bonadonna, C. (2012). Improving on mass flow rate estimates of volcanic eruptions. *Geophys. Res. Lett.* 39, L16308.
 - Mastin, L.G. et al. (2009). A multidisciplinary effort to assign realistic source parameters to models of volcanic ash-cloud transport and dispersion during eruptions. *J. Volcanol. Geotherm. Res.* 186, 10–21.
+- Folch, A., Mingari, L., Gutierrez, N. et al. (2020). FALL3D-8.0: a computational model for atmospheric transport and deposition of particles, aerosols and radionuclides – Part 1: Model physics and numerics. *Geosci. Model Dev.* 13, 1431–1458. <https://doi.org/10.5194/gmd-13-1431-2020>
 - Hoshizumi, H., Kawanabe, Y., Kamata, H., Saito, E. (1996). Eruption and products of Kuju volcano in October 1995. *Chishitsu News* 498, 33–35 (in Japanese). <https://www.gsj.jp/data/chishitsunews/96_02_14.pdf>
 - Maeno, F., Nagai, M., Nakada, S. et al. (2014). Constraining tephra dispersion and deposition from three subplinian explosions in 2011 at Shinmoedake volcano, Kyushu, Japan. *Bull. Volcanol.* 76, 823. <https://doi.org/10.1007/s00445-014-0823-9>
 - Nakada, S., Nagai, M., Kaneko, T., Suzuki, Y., Maeno, F. (2013). The outline of the 2011 eruption at Shinmoe-dake (Kirishima), Japan. *Earth Planets Space* 65, 475–488. <https://doi.org/10.5047/eps.2013.03.016>

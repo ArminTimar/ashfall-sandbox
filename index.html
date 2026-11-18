@@ -12,26 +12,26 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230c1014'/%3E%3Cpath d='M4 26 L13 8 L19 8 L28 26 Z' fill='%23b4551c'/%3E%3Cpath d='M13 8 L19 8 L21 12 L11 12 Z' fill='%23f8d271'/%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <!-- stamp:start (written by tools/stamp.mjs) -->
-<meta name="data-version" content="0.5.4">
+<meta name="data-version" content="0.5.5">
 <script type="importmap">
 {
   "imports": {
-    "./js/grid.js": "./js/grid.js?v=0.5.4",
-    "./js/help.js": "./js/help.js?v=0.5.4",
-    "./js/main.js": "./js/main.js?v=0.5.4",
-    "./js/params.js": "./js/params.js?v=0.5.4",
-    "./js/parse.js": "./js/parse.js?v=0.5.4",
-    "./js/particles.js": "./js/particles.js?v=0.5.4",
-    "./js/physics.js": "./js/physics.js?v=0.5.4",
-    "./js/proj.js": "./js/proj.js?v=0.5.4",
-    "./js/scene.js": "./js/scene.js?v=0.5.4",
-    "./js/terrain.js": "./js/terrain.js?v=0.5.4",
-    "./js/terrainmesh.js": "./js/terrainmesh.js?v=0.5.4",
-    "./js/texture.js": "./js/texture.js?v=0.5.4",
-    "./js/ui.js": "./js/ui.js?v=0.5.4",
-    "./js/vectors.js": "./js/vectors.js?v=0.5.4",
-    "./js/vei.js": "./js/vei.js?v=0.5.4",
-    "./js/volcanoes.js": "./js/volcanoes.js?v=0.5.4"
+    "./js/grid.js": "./js/grid.js?v=0.5.5",
+    "./js/help.js": "./js/help.js?v=0.5.5",
+    "./js/main.js": "./js/main.js?v=0.5.5",
+    "./js/params.js": "./js/params.js?v=0.5.5",
+    "./js/parse.js": "./js/parse.js?v=0.5.5",
+    "./js/particles.js": "./js/particles.js?v=0.5.5",
+    "./js/physics.js": "./js/physics.js?v=0.5.5",
+    "./js/proj.js": "./js/proj.js?v=0.5.5",
+    "./js/scene.js": "./js/scene.js?v=0.5.5",
+    "./js/terrain.js": "./js/terrain.js?v=0.5.5",
+    "./js/terrainmesh.js": "./js/terrainmesh.js?v=0.5.5",
+    "./js/texture.js": "./js/texture.js?v=0.5.5",
+    "./js/ui.js": "./js/ui.js?v=0.5.5",
+    "./js/vectors.js": "./js/vectors.js?v=0.5.5",
+    "./js/vei.js": "./js/vei.js?v=0.5.5",
+    "./js/volcanoes.js": "./js/volcanoes.js?v=0.5.5"
   }
 }
 </script>
@@ -211,6 +211,11 @@
         <input type="range" id="s-suz" min="1" max="12" step="0.5" aria-label="Column mass peak">
       <div class="hint" id="h-suz"></div>
       </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="t-agg" checked> Ash aggregation</label>
+        <button class="help" type="button" data-help="aggregation" aria-label="About ash aggregation">?</button>
+      </div>
+      <div class="hint left" id="h-agg"></div>
     </div>
 
     <div class="ctl">
@@ -377,6 +382,6 @@
 
 
 </div>
-<script type="module" src="js/main.js?v=0.5.4"></script>
+<script type="module" src="js/main.js?v=0.5.5"></script>
 </body>
 </html>

@@ -10,7 +10,7 @@
 
 import { P, LANDMARKS } from './params.js';
 import { TOGGLES } from './vectors.js';
-import { mastinMER, sampleField } from './physics.js';
+import { mastinMER, sampleField, grainBins } from './physics.js';
 import { VOLCANOES, volcanoById, applyPreset, SOURCES } from './volcanoes.js';
 import { UNITS, parseWith, parseDirection, parsePhi, parseSuzuki } from './parse.js';
 import { veiOfMass } from './vei.js';
@@ -250,6 +250,15 @@ export function syncLabels() {
   const c = veiOfMass(kg, p.rho);
   $('v-vei').textContent = `${c.vei} · ${volFmt(kg / p.rho)} bulk`;
   $('v-vei-ex').textContent = 'Comparable: ' + c.example;
+
+  $('t-agg').checked = !!p.agg;
+  if (p.agg) {
+    const w = grainBins(p).w;
+    const share = w[w.length - 1] * 100;
+    $('h-agg').textContent = `${share < 1 ? share.toFixed(1) : Math.round(share)}% of the mass falls as aggregates`;
+  } else {
+    $('h-agg').textContent = 'Every grain falls on its own';
+  }
 }
 
 /** Push every parameter into its slider and text box, e.g. after a preset. */
@@ -459,6 +468,12 @@ export function bindUI(handlers) {
     b.addEventListener('click', () => handlers.onView(b.dataset.v));
   }
   $('t-cont').addEventListener('change', () => handlers.onContours());
+  // Aggregation changes the deposit and the particles of the selected volcano,
+  // like any other eruption parameter.
+  $('t-agg').addEventListener('change', () => {
+    selected.p.agg = $('t-agg').checked;
+    handlers.onModel();
+  });
   // Place-name groups. Each one is its own switch, so a map can show the big
   // cities and the places near the volcano without every hamlet.
   const labelBoxes = ['major', 'city', 'airport', 'town', 'village', 'district', 'near']

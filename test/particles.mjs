@@ -252,9 +252,10 @@ for (const [name, over] of [['fine ash', { phi: 3.5 }], ['lapilli', { phi: -2, s
 // The deposit is what the isopachs draw, so the cloud has to put the same
 // share of its mass at the same distances. This compares the fraction of
 // deposit mass beyond a ring with the fraction of particles landing beyond it.
-{
+// It runs for a tall plume without aggregation and for a small, fine-grained
+// one with it, where the aggregates decide how much ash goes far.
+function ringCompare(label, p) {
   P.mode = 'eruption';
-  const p = Object.assign({}, BASE, { dur: 1, logM: 11, H: 9, phi: 1.5, dir: 250, spd: 12, top: 30 });
   const f = makeField();
   const st = computeField(p, VENT[0], VENT[1], VENT[2], f);
   const RINGS = [10, 25, 50];
@@ -288,15 +289,60 @@ for (const [name, over] of [['fine ash', { phi: 3.5 }], ['lapilli', { phi: -2, s
     }
     if (!cloud.parts.length && cloud.clock.released >= cloud.clock.budget) break;
   }
-  console.log('\n  beyond    deposit mass   landed particles');
+  console.log(`\n  ${label}\n  beyond    deposit mass   landed particles`);
   RINGS.forEach((R, k) => {
     const dep = (100 * massBeyond[k]) / mass;
     const par = (100 * dists.filter((d) => d > R).length) / Math.max(dists.length, 1);
     console.log(`  ${String(R).padStart(4)} km ${dep.toFixed(1).padStart(12)}% ${par.toFixed(1).padStart(15)}%`);
     check(Math.abs(dep - par) < 8,
-      `beyond ${R} km the deposit has ${dep.toFixed(1)}% of its mass but ${par.toFixed(1)}% of particles land there`);
+      `${label}: beyond ${R} km the deposit has ${dep.toFixed(1)}% of its mass but ${par.toFixed(1)}% of particles land there`);
   });
-  check(dists.length > 400, `only ${dists.length} particles landed on the map`);
+  check(dists.length > 400, `${label}: only ${dists.length} particles landed on the map`);
+  return RINGS.map((R, k) => massBeyond[k] / mass);
+}
+ringCompare('9 km plume, no aggregation',
+  Object.assign({}, BASE, { dur: 1, logM: 11, H: 9, phi: 1.5, dir: 250, spd: 12, top: 30 }));
+const SMALL = Object.assign({}, BASE, { dur: 1, logM: 6.5, H: 1.5, phi: 3, sig: 1.5, suz: 8,
+  dir: 270, spd: 8, top: 20, K: 1000 });
+const aggOn = ringCompare('1.5 km plume, fine ash, with aggregation', Object.assign({}, SMALL, { agg: true }));
+
+// --- 7b. aggregation keeps mass and pulls it in ------------------------------
+{
+  const off = grainBins(SMALL), on = grainBins(Object.assign({}, SMALL, { agg: true }));
+  const sum = (a) => a.reduce((s, x) => s + x, 0);
+  check(Math.abs(sum(on.w) - 1) < 1e-9, `aggregation should keep the total mass, the bins sum to ${sum(on.w)}`);
+  check(on.w.length === off.w.length + 1, 'aggregation should add exactly one bin');
+  // Cornell: nothing coarser than phi 3 aggregates.
+  for (let j = 0; j < 9; j++) {
+    check(Math.abs(on.w[j] - off.w[j]) < 1e-12, `the bin at phi ${(-5 + (j + 0.5) * 10 / 12).toFixed(2)} should not aggregate`);
+  }
+  const f = makeField();
+  computeField(SMALL, VENT[0], VENT[1], VENT[2], f);
+  let mass = 0, far = 0;
+  const [bi0, bi1, bj0, bj1] = f.bbox;
+  for (let j = bj0; j <= bj1; j++) for (let i = bi0; i <= bi1; i++) {
+    const L = f.data[j * GRID.nx + i];
+    const r = Math.hypot(GRID.west + (i + 0.5) * GRID.cell - VENT[0], GRID.south + (j + 0.5) * GRID.cell - VENT[1]);
+    mass += L; if (r > 50000) far += L;
+  }
+  const offFar = far / mass, onFar = aggOn[2];
+  console.log(`  share of the small eruption's deposit beyond 50 km: ${(100 * offFar).toFixed(1)}% without aggregation, `
+    + `${(100 * onFar).toFixed(1)}% with it (${(100 * on.w[on.w.length - 1]).toFixed(0)}% of the mass aggregates)`);
+  check(onFar < offFar * 0.8, 'aggregation should cut the far deposit of a fine-grained eruption by at least a fifth');
+
+  // Particles join aggregates as often as the deposit moves mass into them.
+  P.mode = 'eruption';
+  const p = Object.assign({}, SMALL, { agg: true, dur: 60 });
+  let n = 0, agg = 0;
+  for (let rep = 0; rep < 6; rep++) {
+    const cloud = makeCloud(...VENT);
+    replayCloud(cloud, p, 800);
+    stepCloud(cloud, p, 61, pos, col, 0, tint);
+    for (const q of cloud.parts) { n++; if (q.agg) agg++; }
+  }
+  const want = on.w[on.w.length - 1];
+  console.log(`  aggregated particles ${(100 * agg / n).toFixed(1)}%, aggregate bin ${(100 * want).toFixed(1)}% of the mass`);
+  check(Math.abs(agg / n - want) < 0.03, `${(100 * agg / n).toFixed(1)}% of particles aggregate but ${(100 * want).toFixed(1)}% of the mass does`);
 }
 
 // --- 8. two volcanoes, two independent clouds ------------------------------

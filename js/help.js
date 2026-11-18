@@ -140,6 +140,20 @@ export const HELP = {
       volume for the VEI. Fresh fall deposits are roughly 500 to 2,000 kg/m³,
       depending on grain size, compaction and rain (Blong et&nbsp;al., 2017).</p>`
   },
+  aggregation: {
+    title: 'Ash aggregation',
+    html: `<p>Fine ash sticks together in the plume, held by moisture and
+      electrostatic charge, and falls as clusters far faster than its single
+      grains would. Without it, the finest ash stays aloft for hours and carries
+      several per cent of even a small eruption's mass beyond 100&nbsp;km.</p>
+      <p>Switched on, the scheme of Cornell et&nbsp;al. (1983) as the FALL3D model
+      applies it: half of the ash between φ&nbsp;3 and 4 (125 to 63&nbsp;µm) and
+      three quarters between φ&nbsp;4 and 5 (63 to 31&nbsp;µm) fall as aggregates
+      300&nbsp;µm across with a density of 350&nbsp;kg/m³. The deposit and the
+      moving particles both use it.</p>
+      <p>The real share varies a lot between eruptions and with the weather. It
+      was 18% of the deposit at Aso in October 2016 (Tsuji et&nbsp;al., 2020).</p>`
+  },
   isopach: {
     title: 'Isopachs',
     html: `<p>Contour lines of equal deposit thickness. This is the usual way to map

@@ -465,6 +465,7 @@ button.p[aria-pressed="true"] {
   text-align: right;
 }
 .hint:empty { display: none; }
+.hint.left { text-align: left; }
 .hint.warn { color: var(--accent-ink); }
 
 .note code, .help-pop code {

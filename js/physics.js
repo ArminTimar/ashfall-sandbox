@@ -13,7 +13,7 @@
 // published Tephra2 inversion.
 //
 // Every function takes the eruption's parameters explicitly (an object with
-// H, logM, phi, sig, suz, dir, spd, top, shear, K, rho), because each volcano
+// H, logM, phi, sig, suz, dir, spd, top, shear, K, rho, agg), because each volcano
 // on the map has its own eruption and its own wind.
 
 import { G, MU, RHO0, HS, NPHI, NH, GRID } from './params.js';
@@ -117,7 +117,42 @@ export function gauss() {
   return u * m;
 }
 
-/** Grain size bins: Gaussian in phi, truncated at phi 5 (31 um) and renormalised. */
+// ---------------------------------------------------------------------------
+// Aggregation
+// ---------------------------------------------------------------------------
+//
+// Fine ash sticks together in the plume and falls as clusters much faster than
+// its single grains would. Without that, the finest sizes drift for hours and
+// put several per cent of a small eruption's mass beyond 100 km.
+//
+// This is the Cornell et al. (1983) scheme as FALL3D implements it
+// (Sources/mod_Grn.F90, case 'CORNELL'): half of the ash between phi 3 and 4,
+// three quarters between phi 4 and 5 and 90% finer than phi 5 falls as
+// aggregates instead of single grains. FALL3D leaves the aggregate size and
+// density to the user. 300 um and 350 kg/m^3 are the first aggregate class in
+// its input template (Templates/template.inp), and Folch et al. (2020) give
+// 100 to 300 um as the usual range.
+//
+// An eruption aggregates when p.agg is true. Parameter sets without the key,
+// such as the tests' own, do not.
+
+export const AGG = { d: 300e-6, rho: 350 };
+
+/** Share of the ash at a given phi that falls as aggregates (Cornell scheme). */
+export function aggFraction(phi) {
+  if (phi <= 3) return 0;
+  if (phi <= 4) return 0.5;
+  if (phi <= 5) return 0.75;
+  return 0.9;
+}
+
+/**
+ * Grain size bins: Gaussian in phi, truncated at phi 5 (31 um) and
+ * renormalised. With aggregation on, part of each fine bin moves into one
+ * extra bin at the end, the aggregates. The share moved is averaged over the
+ * width of the bin, because a bin can straddle phi 4 and the particles draw
+ * their sizes continuously.
+ */
 export function grainBins(p) {
   const pMin = -5, pMax = 5, dphi = (pMax - pMin) / NPHI;
   const w = [], d = [], rho = [];
@@ -129,7 +164,25 @@ export function grainBins(p) {
     d.push(Math.pow(2, -phi) / 1000);
     rho.push(1200 + 1200 * ((phi - pMin) / (pMax - pMin)));
   }
-  return { w: w.map((x) => x / sum), d, rho };
+  const out = { w: w.map((x) => x / sum), d, rho };
+  if (!p.agg) return out;
+
+  let agg = 0;
+  for (let j = 0; j < NPHI; j++) {
+    const lo = pMin + dphi * j;
+    let num = 0, den = 0;
+    for (let s = 0; s < 40; s++) {
+      const phi = lo + dphi * (s + 0.5) / 40;
+      const g = Math.exp(-Math.pow(phi - p.phi, 2) / (2 * p.sig * p.sig));
+      num += g * aggFraction(phi); den += g;
+    }
+    const a = den > 0 ? num / den : 0;
+    if (!a) continue;
+    agg += out.w[j] * a;
+    out.w[j] *= 1 - a;
+  }
+  out.w.push(agg); out.d.push(AGG.d); out.rho.push(AGG.rho);
+  return out;
 }
 
 /** Release heights with Suzuki mass distribution. The peak sits at 1 - 1/A. */
@@ -227,7 +280,7 @@ export function computeField(p, ventE, ventN, ventZ, f) {
   const used = new Set();
 
   for (let i = 0; i < NH; i++) {
-    for (let j = 0; j < NPHI; j++) {
+    for (let j = 0; j < g.w.length; j++) {
       const m = M * h.w[i] * g.w[j];
       if (!(m > 0)) continue;
       const fp = fallPath(p, h.z[i], g.d[j], g.rho[j]);

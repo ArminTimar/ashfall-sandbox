@@ -39,6 +39,7 @@ Checked against `common_src/tephra2_calc.c` and `parameters.h`.
 | Air | 1.293 kg/m³ at sea level, viscosity 1.8325 × 10⁻⁵ Pa·s | 1.225 kg/m³, 1.8 × 10⁻⁵ Pa·s |
 | Particle density | Pumice density at φ −1 and coarser, lithic density at φ 7 and finer, both set by the user | 1200 kg/m³ at φ −5 to 2400 at φ 5, fixed |
 | Buoyancy | Settling laws use the particle density | They use particle minus air density |
+| Aggregation | None in `tephra2_calc.c` | Optional Cornell et al. (1983) scheme, as FALL3D implements it |
 
 The air values make grains here settle 2 to 3% faster. An earlier version of
 this page listed the column under "the same in both", which was wrong.

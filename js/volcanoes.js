@@ -142,7 +142,7 @@ export const VOLCANOES = [
           ['Grain size from the dry-sieved total distribution, mean −0.5 φ, sorting 2.3 φ', 'tsuji2020'],
           ['Wind from the SE to SW low down and from the west aloft, 2 to 39 m/s', 'tsuji2020'],
           ['Eruption 160 to 220 s long', 'tsuji2020'],
-          ['Ash aggregation, important in this eruption, is not modelled. K assumed']
+          ['Aggregates were 18 wt% of the deposit. The general aggregation scheme used here does not know that, so the far deposit may still come out heavy. K assumed', 'tsuji2020']
         ]
       }
     ]
@@ -197,7 +197,9 @@ for (const v of VOLCANOES) {
   const [E, N] = toEN(v.lon, v.lat);
   Object.assign(v, {
     E, N,
-    p: Object.assign({}, v.presets.length ? v.presets[0].p : GENERIC),
+    // Aggregation is a modelling choice, not part of any preset, so it starts
+    // on and applying a preset leaves it as the switch has it.
+    p: Object.assign({ agg: true }, v.presets.length ? v.presets[0].p : GENERIC),
     preset: v.presets.length ? v.presets[0].id : null,
     erupting: v.id === 'sakurajima',
     field: null,

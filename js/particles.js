@@ -32,7 +32,7 @@
 // cloud stores the vent it belongs to.
 
 import { GRID, P } from './params.js';
-import { airRho, vSettle, windAt, gauss } from './physics.js';
+import { airRho, vSettle, windAt, gauss, aggFraction, AGG } from './physics.js';
 import { elevAt } from './terrain.js';
 
 // The number of particles scales with erupted mass: 1.66 times as many for
@@ -153,6 +153,9 @@ function newPart(C, p) {
     phi = p.phi + p.sig * gauss();
   }
   const gx = gauss(), gy = gauss();
+  // Fine ash joins an aggregate with the same probability the deposit moves
+  // its mass into the aggregate bin, and then falls as one.
+  const agg = !!p.agg && Math.random() < aggFraction(phi);
   return {
     x: 0, y: 0, z: C.base,
     rel: sampleRelease(C),
@@ -162,9 +165,10 @@ function newPart(C, p) {
     gx, gy,                     // fixed place in the plume cross-section
     // The updraft is fastest on the axis and slower towards the edge.
     wf: (0.6 + 0.4 * Math.exp(-(gx * gx + gy * gy) / 2)) * (0.9 + 0.2 * Math.random()),
-    d: Math.pow(2, -phi) / 1000,
-    rp: 1200 + 1200 * ((phi - PHI_MIN) / (PHI_MAX - PHI_MIN)),
-    phi,
+    d: agg ? AGG.d : Math.pow(2, -phi) / 1000,
+    rp: agg ? AGG.rho : 1200 + 1200 * ((phi - PHI_MIN) / (PHI_MAX - PHI_MIN)),
+    phi,                        // size of the grain itself, aggregated or not
+    agg,
     rising: true
   };
 }
@@ -301,7 +305,7 @@ function fillSteady(cloud, C, p, count) {
 
     const q = newPart(C, p);
     const o = src[c];
-    q.rel = o.rel; q.d = o.d; q.rp = o.rp; q.phi = o.phi; q.wf = o.wf;
+    q.rel = o.rel; q.d = o.d; q.rp = o.rp; q.phi = o.phi; q.agg = o.agg; q.wf = o.wf;
     if (i < got) { q.gx = o.gx; q.gy = o.gy; }
 
     // First point of this life at or after the wanted time. A life can be
