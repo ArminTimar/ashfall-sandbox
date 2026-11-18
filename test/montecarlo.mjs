@@ -121,5 +121,28 @@ for (const dt of [20, 5]) {
   }
 }
 
+// Settling velocity has to change smoothly with grain size. The three regimes
+// meet with small steps (a percent or so at Re 6, more at Re 500), but a grain
+// 0.14% larger must never fall several times faster or slower. An earlier
+// regime test left a sliver of sizes just past Re 6 on the Newton law, three
+// times too fast, and both implementations above shared it, so they agreed.
+{
+  let worst = 1, at = '';
+  for (const z of [0, 2000, 5000, 10000, 20000]) {
+    const ra = airRho(z);
+    let prev = 0;
+    for (let phi = 5; phi >= -5; phi -= 0.002) {
+      const v = vSettle(Math.pow(2, -phi) / 1000, 1200 + 1200 * ((phi + 5) / 10), ra);
+      if (prev > 0) {
+        const r = Math.max(v / prev, prev / v);
+        if (r > worst) { worst = r; at = `phi ${phi.toFixed(2)} at ${z} m`; }
+      }
+      prev = v;
+    }
+  }
+  console.log(`\n  settling velocity: largest step between neighbouring sizes ${((worst - 1) * 100).toFixed(1)}% (${at})`);
+  if (worst > 1.05) { console.log('  FAIL settling velocity jumps between neighbouring grain sizes'); fail++; }
+}
+
 console.log(fail ? `\n${fail} check(s) failed` : '\nOK - particle cloud matches the analytical deposit');
 process.exit(fail ? 1 : 0);

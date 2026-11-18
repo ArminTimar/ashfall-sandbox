@@ -16,9 +16,12 @@ function normalise(raw) {
   let s = String(raw).trim()
     .replace(/[−–—]/g, '-')                               // unicode minus signs
     .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+/g, (m) => '^' + [...m].map((c) => SUPERSCRIPT[c]).join(''));
-  // Thousands separators: a comma followed by exactly three digits and then
-  // something that is not a digit. "2,500" is 2500; "2,5" is 2.5.
-  s = s.replace(/(\d),(?=\d{3}(?:\D|$))/g, '$1').replace(/,/g, '.');
+  // Thousands separators: one to three digits not starting with 0, then groups
+  // of exactly three. "2,500" is 2500 and "1,234,567" is 1234567. Anything
+  // else with a comma is a decimal comma: "2,5" is 2.5, and so is "0,125",
+  // which the three digits after the comma used to turn into 125.
+  s = s.replace(/\d[\d,]*\d/g, (tok) => (/^[1-9]\d{0,2}(?:,\d{3})+$/.test(tok) ? tok.replace(/,/g, '') : tok))
+    .replace(/,/g, '.');
   return s;
 }
 

@@ -216,7 +216,11 @@ export function syncMode() {
   }
   $('mode-note').textContent = MODE_NOTE[P.mode] || '';
   for (const el of document.querySelectorAll('.erupt-only')) {
-    el.classList.toggle('off', P.mode !== 'eruption');
+    const off = P.mode !== 'eruption';
+    el.classList.toggle('off', off);
+    // Greyed out for the pointer is not enough: without this the Tab key
+    // still lands on controls that do nothing in this mode.
+    el.inert = off;
   }
   updateClock();
 }
@@ -269,9 +273,10 @@ function combinedAt(E, N) {
 /**
  * Readouts for the selected volcano's two reference places, the combined peak
  * and the combined area over 1 mm.
- * @param {number} maxMM combined maximum thickness from texture.paintTexture
+ * @param {object} stats { maxMM, maxLoad, area1 } from texture.paintTexture,
+ *   measured on the deposits of every erupting volcano added together
  */
-export function updateReadout(maxMM = 0) {
+export function updateReadout({ maxMM = 0, maxLoad = 0, area1: a1 = 0 } = {}) {
   selected.refs.forEach((name, k) => {
     const key = 'r-' + 'ab'[k];
     $(key + '-k').textContent = name;
@@ -283,12 +288,10 @@ export function updateReadout(maxMM = 0) {
     setBadge(key + '-d', mm);
   });
 
-  let maxLoad = 0, a1 = 0, total = 0, M = 0;
-  for (const v of VOLCANOES) {
-    if (!v.erupting || !v.field) continue;
-    maxLoad = Math.max(maxLoad, v.field.stats.max);
-    a1 += v.field.stats.a1;
-    if (v === selected) { total = v.field.stats.total; M = v.field.stats.M; }
+  let total = 0, M = 0;
+  if (selected.erupting && selected.field) {
+    total = selected.field.stats.total;
+    M = selected.field.stats.M;
   }
   $('r-max').textContent = fmtMM(maxMM);
   $('r-max-l').textContent = fmtLoad(maxLoad);
@@ -347,7 +350,8 @@ function nudge(F, dirn, big) {
 /**
  * Wire the controls.
  * @param {object} handlers
- *   { onModel, onExaggeration, onPreset, onView, onToggle, onLayer, onReplay }
+ *   { onModel, onExaggeration, onPreset, onSelect, onErupt, onFly, onFocus,
+ *     onTheme, onSave, onView, onReplay, onContours, onPlume, onLayer, onLabels }
  */
 export function bindUI(handlers) {
   const fire = (F) => {
@@ -377,7 +381,13 @@ export function bindUI(handlers) {
     box.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (box.value === startText || commitTyped(F, box.value, fire)) box.blur();
+        if (box.value === startText || commitTyped(F, box.value, fire)) {
+          // Mark the text as committed, or the blur handler below reads it as
+          // an unsaved edit and commits it a second time, recomputing the
+          // deposit twice for one keypress.
+          startText = box.value;
+          box.blur();
+        }
       } else if (e.key === 'Escape') {
         e.preventDefault();
         F.note = '';
@@ -448,7 +458,7 @@ export function bindUI(handlers) {
   for (const b of document.querySelectorAll('.views button')) {
     b.addEventListener('click', () => handlers.onView(b.dataset.v));
   }
-  $('t-cont').addEventListener('change', handlers.onToggle);
+  $('t-cont').addEventListener('change', () => handlers.onContours());
   // Place-name groups. Each one is its own switch, so a map can show the big
   // cities and the places near the volcano without every hamlet.
   const labelBoxes = ['major', 'city', 'airport', 'town', 'village', 'district', 'near']
@@ -456,7 +466,7 @@ export function bindUI(handlers) {
   const labelCfg = () => Object.fromEntries(labelBoxes.map(([id, box]) => [id, box.checked]));
   for (const [, box] of labelBoxes) box.addEventListener('change', () => handlers.onLabels(labelCfg()));
   handlers.onLabels(labelCfg());
-  $('t-part').addEventListener('change', handlers.onToggle);
+  $('t-part').addEventListener('change', () => handlers.onPlume());
 
   for (const t of TOGGLES) {
     const box = $(t.id);
@@ -488,9 +498,6 @@ export function syncVolcano() {
       const S = src && SOURCES[src];
       return `<li>${text}.${S ? ` <a href="${S.url}" target="_blank" rel="noopener">${S.cite}</a>` : ''}</li>`;
     }).join('') + '</ul>' : '';
-  }
-  for (const b of document.querySelectorAll('.col-ctl .needs-erupt')) {
-    b.classList.toggle('off', !v.erupting);
   }
   syncInputs();
 }

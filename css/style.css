@@ -1,6 +1,8 @@
-/* Sakurajima Ashfall Sandbox
-   Page chrome follows the viewer's theme; the 3D panel is deliberately dark in
-   both, because the ash ramp is built for a dark ground. */
+/* Kyushu Ashfall Sandbox
+   The page and the 3D panel share one theme, dark or light, chosen with the
+   buttons under "View & deposit" and set as data-theme on <html> and on
+   #scene by js/main.js at start-up (dark unless light was chosen before). The
+   prefers-color-scheme block only covers the moment before that script runs. */
 
 :root {
   --ink: #15191e;
@@ -398,6 +400,11 @@ footer p { color: var(--muted); max-width: none; }
 .toggles.map .sw.road { color: #d9cfbe; }
 .toggles.map .sw.rail { color: #7fc7e8; border-top-style: dashed; }
 .toggles.map .sw.city { color: #f0b45c; }
+/* The light map draws these layers in other colours, and the dark ones barely
+   show on a white panel. */
+:root[data-theme="light"] .toggles.map .sw.road { color: #8a5a3c; }
+:root[data-theme="light"] .toggles.map .sw.rail { color: #2c4f8f; }
+:root[data-theme="light"] .toggles.map .sw.city { color: #8e3b8e; }
 
 /* Plume animation block: mode switch, the eruption-only controls and the run
    clock. The eruption controls stay in the flow in both modes but go quiet in
@@ -543,11 +550,6 @@ ul.sources {
 }
 ul.sources li { margin-bottom: 3px; }
 ul.sources a { color: var(--accent-ink); }
-.needs-erupt.off { opacity: 0.45; }
-
-/* ---------- labels: airports and erupting vents ---------- */
-.pin.vent.erupting { color: #ff9a5c; }
-.pin.vent.erupting::before { border-bottom-color: #ff7a3c; }
 
 /* ---------- light map theme ---------- */
 #scene[data-theme="light"] { background: #cfe2f1; }

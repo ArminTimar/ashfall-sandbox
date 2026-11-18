@@ -99,7 +99,8 @@ The boxes accept the forms people usually write numbers in:
 | Density | `1200`, `1.2 g/cm³` |
 | Eruption length | `45` (min), `1.5 h`, `300 s` |
 
-A decimal comma works (`2,5`), and so does a thousands separator (`2,500`).
+A decimal comma works (`2,5` or `0,125`), and so does a thousands separator
+(`2,500`).
 
 Controls whose meaning isn't obvious outside physical volcanology have a **?**
 button: φ, sorting, Suzuki *A*, directional shear, eddy diffusivity, bulk
@@ -115,9 +116,9 @@ a historical eruption of about the same size.
 | Volcano | Vent | Presets |
 | --- | --- | --- |
 | Sakurajima | Minamidake crater, 1,000 m | Routine Vulcanian explosion. Taishō 1914, subPlinian phase |
-| Shinmoedake | summit crater, 1,421 m | 26 and 27 January 2011 subplinian explosions |
+| Shinmoedake | summit crater, Kirishima, 1,421 m | 26 and 27 January 2011 subplinian explosions |
 | Aso | Nakadake first crater, about 1,200 m | 8 October 2016 phreatomagmatic explosion |
-| Kujū | Hosshōzan north flank, about 1,500 m | 11 October 1995 phreatic eruption |
+| Kujū | Hosshōzan east flank, about 1,500 m | 11 October 1995 phreatic eruption |
 | Unzen | Heisei-shinzan, 1,483 m | none yet |
 | Kaimondake | summit, 924 m | none yet |
 
@@ -171,17 +172,17 @@ above 1% of the peak within about 6%.
 
 | Component | Treatment |
 | --- | --- |
-| Settling velocity | Three regimes after Bonadonna et al. (1998): Stokes below Re 6, an intermediate law up to Re 500, Newton above that |
+| Settling velocity | Three regimes as coded in Tephra2, which credits Bonadonna et al. (1998): Stokes below Re 6, an intermediate law up to Re 500, Newton above that. The thresholds are Tephra2's. The abstract of the 1998 paper puts the lower one at Re 0.4, but the Stokes and intermediate laws cross at Re 5.76, so switching near 6 is what keeps the velocity continuous |
 | Particle density | Depends on grain size, from 1200 kg/m³ for coarse vesicular clasts to 2400 for fine glass and crystal fragments |
-| Atmosphere | Exponential density profile, scale height 8200 m, viscosity 1.8 × 10⁻⁵ Pa·s |
-| Column | Suzuki distribution over release height. Release peaks at 1 − 1/A of the plume height |
+| Atmosphere | Exponential density profile, 1.225 kg/m³ at sea level, scale height 8200 m, viscosity 1.8 × 10⁻⁵ Pa·s. Tephra2 has the same scale height with 1.293 kg/m³ and 1.8325 × 10⁻⁵ Pa·s, which makes its grains settle 2 to 3% slower |
+| Column | Suzuki distribution over release height, `(1 − ζ)·exp(A(ζ − 1))`, the form Takishita et al. (2024) give as their equation 1 with *k* for *A*. Release peaks at 1 − 1/A of the plume height. Tephra2 itself offers uniform, log-normal and beta profiles instead |
 | Grain size | Gaussian in φ, 12 bins from φ −5 (32 mm) to φ 5 (31 µm), renormalised |
 | Wind | Speed interpolated between the 2 km and 12 km values, direction turning evenly by the shear angle over the same range. One profile per volcano |
 | Source consistency | Mastin et al. (2009), `H = 2.00·V̇^0.241`, inverted to flag a plume height and erupted mass that can't belong to the same eruption |
 | Coordinates | JGD2011 / Japan Plane Rectangular CS II (EPSG:6670), transverse Mercator on GRS80, checked against pyproj to under 0.1 mm |
 | Terrain | GSI 標高タイル (PNG) zoom 11, warped to a 200 m grid of 1,310 × 1,710 cells covering 262 × 342 km |
 | Map layers | OpenStreetMap main roads, railways, prefecture borders and place names |
-| Damage thresholds | After Blong et al. (2017). Nearly all building damage happens between 200 and 1000 mm |
+| Damage labels | The sandbox's own classes, guided by Blong et al. (2017). In their repeat of Tambora 1815, nearly all building damage fell where 200 to 1000 mm of ash landed and under 10 mm added almost none |
 
 ## Plume animation
 
@@ -291,12 +292,22 @@ implementations of the same model, so agreement is a real check.
 
 ```
                 mean x    mean y   spread x  spread y   (km)
-analytic         80.76    -16.55     146.93     31.54
-dt=20s           79.90    -16.38     144.90     31.09
-dt= 5s           80.96    -16.59     146.78     31.50
+analytic         80.93    -16.59     146.94     31.55
+dt=20s           81.10    -16.65     147.43     31.68
+dt= 5s           81.07    -16.61     146.83     31.54
 ```
 
-Position agrees within about 1% and spread within 1.5%, at both step sizes.
+Position and spread agree within about half a percent, at both step sizes.
+
+The same script checks that settling velocity changes smoothly with grain
+size, in steps of 0.002 φ at five altitudes. The regimes of Bonadonna et al.
+(1998) meet with a step of about 2%. Up to and including v0.5.3 a sliver of
+sizes just past
+Re 6 (about 110 µm at sea level, 170 µm at 10 km) was sent to the Newton law
+and fell three times too fast. Both implementations shared that mistake, so
+they agreed with each other, and it showed only as the 20 s run drifting about
+1% from the 5 s one. The regime is now chosen the way Tephra2's
+`part_fall_time` chooses it.
 
 **`test/particles.mjs`** checks the animation. A fresh seed has to match a
 cloud run to equilibrium in four grain size and wind regimes. The particle
@@ -548,7 +559,7 @@ Place names are grouped by size, and each group has its own switch:
 | --- | --- | --- | --- |
 | Major cities | 300,000 people or more | any distance | yes |
 | Cities | 100,000 or more | 340 km | yes |
-| Airports | the nine in the window | 200 km | yes |
+| Airports | the eight listed in `js/params.js` | 200 km | yes |
 | Towns | 10,000 or more | 150 km | no |
 | Villages | under 10,000 | 70 km | no |
 | Districts | city wards and former towns | 45 km | no |
@@ -581,6 +592,7 @@ and `js/volcanoes.js`, with their grid positions calculated.
 - Connor, L.J., Connor, C.B. Tephra2. <https://github.com/geoscience-community-codes/tephra2>
 - Degruyter, W., Bonadonna, C. (2012). Improving on mass flow rate estimates of volcanic eruptions. *Geophys. Res. Lett.* 39, L16308.
 - Mastin, L.G. et al. (2009). A multidisciplinary effort to assign realistic source parameters to models of volcanic ash-cloud transport and dispersion during eruptions. *J. Volcanol. Geotherm. Res.* 186, 10–21.
+- Hoshizumi, H., Kawanabe, Y., Kamata, H., Saito, E. (1996). Eruption and products of Kuju volcano in October 1995. *Chishitsu News* 498, 33–35 (in Japanese). <https://www.gsj.jp/data/chishitsunews/96_02_14.pdf>
 - Maeno, F., Nagai, M., Nakada, S. et al. (2014). Constraining tephra dispersion and deposition from three subplinian explosions in 2011 at Shinmoedake volcano, Kyushu, Japan. *Bull. Volcanol.* 76, 823. <https://doi.org/10.1007/s00445-014-0823-9>
 - Nakada, S., Nagai, M., Kaneko, T., Suzuki, Y., Maeno, F. (2013). The outline of the 2011 eruption at Shinmoe-dake (Kirishima), Japan. *Earth Planets Space* 65, 475–488. <https://doi.org/10.5047/eps.2013.03.016>
 - Newhall, C.G., Self, S. (1982). The volcanic explosivity index (VEI): an estimate of explosive magnitude for historical volcanism. *J. Geophys. Res.* 87(C2), 1231–1238.

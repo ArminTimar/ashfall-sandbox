@@ -168,7 +168,12 @@ function unionBox(fields) {
  * change or the theme does.
  * @param {object[]} fields deposit fields from physics.makeField, with rho set
  *   through field.stats.mmFac
- * @returns {number} the combined maximum thickness in mm
+ * @returns {{maxMM:number, maxLoad:number, area1:number}} for the deposits
+ *   added together: the greatest thickness in mm, the load in kg/m^2 at that
+ *   same cell, and the area thicker than 1 mm in km^2. They are measured here
+ *   because this is the one place the fields are summed. Adding up each
+ *   field's own area would count an overlap twice and miss ground where only
+ *   the sum passes 1 mm.
  */
 export function paintTexture(fields, showContours = true) {
   if (baseTheme !== P.theme) buildBase(P.theme);
@@ -180,13 +185,13 @@ export function paintTexture(fields, showContours = true) {
       Math.min(box[2], painted[2]), Math.max(box[3], painted[3])] : painted;
   }
   painted = now;
-  if (!box) return 0;
+  if (!box) return { maxMM: 0, maxLoad: 0, area1: 0 };
 
   const [i0, i1, r0, r1] = box;
   const w = i1 - i0 + 1, h = r1 - r0 + 1;
   if (mmGrid.length < w * h) mmGrid = new Float32Array(w * h);
   mmGrid.fill(0, 0, w * h);
-  let maxMM = 0;
+  let maxMM = 0, maxAt = -1;
   const live = fields.filter((f) => f && f.bbox);
   for (const f of live) {
     const [fi0, fi1, fj0, fj1] = f.bbox;
@@ -198,18 +203,23 @@ export function paintTexture(fields, showContours = true) {
         const v = f.data[src + i];
         if (v > 0) {
           const m = (mmGrid[dst + i] += v * fac);
-          if (m > maxMM) maxMM = m;
+          if (m > maxMM) { maxMM = m; maxAt = src + i; }
         }
       }
     }
   }
+  // maxAt indexes the south-up field grid, which every field shares.
+  let maxLoad = 0;
+  if (maxAt >= 0) for (const f of live) maxLoad += f.data[maxAt];
 
   const base = baseImg.data, d = workImg.data, L = lut(P.theme);
   const scale = LUT_N / (LOG_HI - LOG_LO);
+  let over1 = 0;
   for (let r = r0; r <= r1; r++) {
     for (let i = i0; i <= i1; i++) {
       const o = (r * nx + i) * 4;
       const mm = mmGrid[(r - r0) * w + (i - i0)];
+      if (mm > 1) over1++;
       if (mm <= FLOOR) {
         d[o] = base[o]; d[o + 1] = base[o + 1]; d[o + 2] = base[o + 2];
         continue;
@@ -259,5 +269,5 @@ export function paintTexture(fields, showContours = true) {
     }
     ctx.restore();
   }
-  return maxMM;
+  return { maxMM, maxLoad, area1: (over1 * GRID.cell * GRID.cell) / 1e6 };
 }

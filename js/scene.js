@@ -201,7 +201,7 @@ function bindControls() {
 
   el.addEventListener('contextmenu', (e) => e.preventDefault());
   el.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.views, .legend-box')) return;
+    if (e.target.closest('.views')) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     el.setPointerCapture(e.pointerId);
     el.classList.add('drag');
@@ -244,7 +244,17 @@ function bindControls() {
   el.addEventListener('wheel', (e) => {
     e.preventDefault();
     goal = null;
-    orbit.dist *= 1 + Math.sign(e.deltaY) * 0.1;
+    // Zoom by how far the wheel moved, not by a fixed step per event. A mouse
+    // wheel sends one event of about 100 px per notch, which is the 10% it
+    // always was. A trackpad sends dozens of events of a few px each, and a
+    // fixed 10% for every one of those crossed the whole zoom range in a
+    // single swipe.
+    let d = e.deltaY;
+    if (e.deltaMode === 1) d *= 33;           // lines (Firefox with a mouse)
+    else if (e.deltaMode === 2) d *= 300;     // pages
+    if (e.ctrlKey) d *= 8;                    // trackpad pinch: ctrl+wheel, small deltas
+    d = Math.max(-240, Math.min(240, d));
+    orbit.dist *= Math.exp(d * 0.001);
     clampOrbit();
   }, { passive: false });
 }
@@ -288,7 +298,11 @@ function updateCam(dt) {
     orbit.az += daz * k;
     for (const key of ['el', 'tx', 'tz']) orbit[key] += (goal[key] - orbit[key]) * k;
     orbit.dist = Math.exp(Math.log(orbit.dist) + (Math.log(goal.dist) - Math.log(orbit.dist)) * k);
-    if (Math.abs(daz) < 1e-3 && Math.abs(goal.dist / orbit.dist - 1) < 1e-3
+    // Every part of the view has to have arrived. Elevation was left out of
+    // this test, so a flight that only tilted the camera stopped on its first
+    // frame.
+    if (Math.abs(daz) < 1e-3 && Math.abs(goal.el - orbit.el) < 1e-3
+        && Math.abs(goal.dist / orbit.dist - 1) < 1e-3
         && Math.hypot(goal.tx - orbit.tx, goal.tz - orbit.tz) < 0.01) goal = null;
   } else if (orbit.focus) {
     const v = VOLCANOES.find((x) => x.id === orbit.focus);
@@ -373,6 +387,9 @@ function addLabel(wrap, name, E, N, cls, extra = {}) {
   const spec = cls === 'vent' ? VENT : CLASS[cls];
   labelEls.push(Object.assign({
     el, dot, E, N, cls, rank: spec.rank, maxDist: spec.maxDist,
+    // Ground height in km, looked up once. The terrain never changes, and
+    // this used to be interpolated again for every visible label every frame.
+    elev: elevAtSmooth(E, N) / 1000,
     lift: cls === 'vent' ? 0.4 : 0.05, near: false, w: 0, h: 0, on: undefined
   }, extra));
 }
@@ -404,6 +421,22 @@ function sortLabels() {
 
 function measureLabels() {
   for (const L of labelEls) { L.w = L.el.offsetWidth; L.h = L.el.offsetHeight; }
+  measureOverlays();
+}
+
+// The legends, the view buttons and the corner badge sit on top of the map.
+// Their rectangles are kept here, in pixels of the scene element, so place
+// names stay out from under them instead of showing through the text.
+const blocked = [];
+function measureOverlays() {
+  blocked.length = 0;
+  if (!host) return;
+  const o = host.getBoundingClientRect();
+  for (const el of host.querySelectorAll('.ramp, .legend, .views, .badge')) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;      // hidden at this window size
+    blocked.push([r.left - o.left - 4, r.top - o.top - 3, r.right - o.left + 4, r.bottom - o.top + 3]);
+  }
 }
 
 /** Turn place groups on or off: { major: true, town: false, near: true, ... } */
@@ -443,16 +476,20 @@ function updateLabels() {
     if (labelWrap) labelWrap.style.setProperty('--pin-scale', wantScale.toFixed(2));
   }
   placed.length = 0;
+  for (const r of blocked) placed.push(r);
   for (const L of labelEls) {
     const spec = L.cls === 'vent' ? VENT : CLASS[L.cls];
     const near = showNear && L.near;
     let vis = (spec.on || near) && orbit.dist <= (near ? Math.max(spec.maxDist, NEAR_DIST) : spec.maxDist);
     let sx = 0, sy = 0;
     if (vis) {
-      const e = (elevAtSmooth(L.E, L.N) / 1000) * P.ex;
-      _v.set(L.E / 1000, e + L.lift, -L.N / 1000).project(cam);
+      _v.set(L.E / 1000, L.elev * P.ex + L.lift, -L.N / 1000).project(cam);
       vis = _v.z < 1 && Math.abs(_v.x) < 1.02 && Math.abs(_v.y) < 1.02;
       sx = (_v.x * 0.5 + 0.5) * w; sy = (-_v.y * 0.5 + 0.5) * h;
+      // A dot under a legend or a button would show through it too.
+      for (const r of blocked) {
+        if (sx > r[0] && sx < r[2] && sy > r[1] && sy < r[3]) { vis = false; break; }
+      }
     }
     let spot = null;
     if (vis) {
@@ -488,9 +525,15 @@ function updateLabels() {
 export function resize() {
   const w = host.clientWidth, h = host.clientHeight;
   if (!w || !h) return;
+  // The pixel ratio changes with browser zoom and between monitors, so it is
+  // read again here. Set once at start-up, it left the map blurred or needlessly
+  // dense after either.
+  const pr = Math.min(window.devicePixelRatio || 1, 2);
+  if (renderer.getPixelRatio() !== pr) renderer.setPixelRatio(pr);
   renderer.setSize(w, h, false);
   cam.aspect = w / h;
   cam.updateProjectionMatrix();
+  measureOverlays();
 }
 
 const TINT = {

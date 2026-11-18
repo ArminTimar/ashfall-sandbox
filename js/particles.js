@@ -35,8 +35,8 @@ import { GRID, P } from './params.js';
 import { airRho, vSettle, windAt, gauss } from './physics.js';
 import { elevAt } from './terrain.js';
 
-// The number of particles scales with erupted mass: 4.5 times as many for
-// every tenfold increase, between these limits. The display buffers in
+// The number of particles scales with erupted mass: 1.66 times as many for
+// every tenfold increase (10^0.22), between these limits. The display buffers in
 // scene.js hold NP_TOTAL, shared by all erupting volcanoes.
 export const NP_MIN = 120;
 export const NP_MAX = 6000;
@@ -304,9 +304,13 @@ function fillSteady(cloud, C, p, count) {
     q.rel = o.rel; q.d = o.d; q.rp = o.rp; q.phi = o.phi; q.wf = o.wf;
     if (i < got) { q.gx = o.gx; q.gy = o.gy; }
 
+    // First point of this life at or after the wanted time. A life can be
+    // 3,000 points long and this runs once per particle, so search by halves
+    // instead of walking the trace.
     const want = T * Math.random();
-    let j = s0 + 1;
-    while (j < s0 + n - 1 && TT[j] < want) j++;
+    let ja = s0 + 1, jb = s0 + n - 1;
+    while (ja < jb) { const mid = (ja + jb) >> 1; if (TT[mid] < want) ja = mid + 1; else jb = mid; }
+    const j = ja;
     const t0 = TT[j - 1], t1 = TT[j];
     const f = t1 > t0 ? clamp01((want - t0) / (t1 - t0)) : 0;
     const lerp = (a) => a[j - 1] + (a[j] - a[j - 1]) * f;

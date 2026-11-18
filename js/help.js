@@ -71,8 +71,10 @@ export const HELP = {
       distribution in φ units. A small value means the grains are all about the
       same size (well sorted). A large value means a wide mix of fine and coarse
       grains (poorly sorted).</p>
-      <p>Folk &amp; Ward (1957) name the ranges: below 0.5 well sorted, 0.5 to 1
-      moderately sorted, 1 to 2 poorly sorted, 2 to 4 very poorly sorted.</p>
+      <p>Folk &amp; Ward (1957) name the ranges: below 0.35 very well sorted, 0.35
+      to 0.5 well sorted, 0.5 to 0.71 moderately well sorted, 0.71 to 1 moderately
+      sorted, 1 to 2 poorly sorted, 2 to 4 very poorly sorted, and above 4
+      extremely poorly sorted. The line under the slider uses the same names.</p>
       <p>A sample from a single outcrop is usually better sorted than the eruption
       as a whole, because grains of different sizes land at different distances.
       This control sets the sorting of the whole eruption.</p>`

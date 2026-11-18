@@ -43,6 +43,10 @@ export const SOURCES = {
     cite: 'Geological Survey of Japan, Kuju: 4. Historic eruptions',
     url: 'https://gbank.gsj.jp/volcano/Act_Vol/kuju/text/eng/exp-3e.html'
   },
+  hoshizumi1996: {
+    cite: 'Hoshizumi et al. (1996), Chishitsu News 498, 33–35 (in Japanese)',
+    url: 'https://www.gsj.jp/data/chishitsunews/96_02_14.pdf'
+  },
   osm: {
     cite: 'OpenStreetMap summit node',
     url: 'https://www.openstreetmap.org/copyright'
@@ -67,12 +71,16 @@ export const VOLCANOES = [
       {
         id: 'vulcanian',
         name: 'Routine Vulcanian explosion',
-        p: { H: 1.5, logM: 6.5, phi: 2.5, sig: 1.5, suz: 2,
+        // A = 8 is the paper's k = 8. An earlier note here said most particles
+        // leave at 1 to 3 km and set A = 2. That figure is in the paper, but it
+        // describes Mannen (2014) on Izu-Oshima 1986. For Sakurajima the paper
+        // finds a top-loaded profile for most events.
+        p: { H: 1.5, logM: 6.5, phi: 2.5, sig: 1.5, suz: 8,
              dir: 270, spd: 8, top: 20, shear: 0, K: 1000, rho: 1000, dur: 600 },
         notes: [
-          ['Plume 1.5 km above the vent, the explosion of 27 June 2022', 'takishita2024'],
-          ['Mass 3 × 10⁶ kg, within the 0.9 to 5.1 × 10⁶ kg per explosion measured in 2011 to 2015, which are minimum estimates', 'oishi2018'],
-          ['Release low in the column (A = 2): most particles segregate at 1 to 3 km above sea level, far below the column top', 'takishita2024'],
+          ['Plume 1,500 m above the vent, the explosion of 12:21 on 27 June 2022', 'takishita2024'],
+          ['Mass 3 × 10⁶ kg, within the 890 to 5,140 t per explosion measured in 2011 to 2015, which are minimum estimates', 'oishi2018'],
+          ['Release near the top of the column (A = 8): of the profiles tried (1, 2, 4 and 8), the top-loaded one fits most events. Ash that leaves lower down is put down to the plume height changing during an event', 'takishita2024'],
           ['Grain size, wind and K assumed']
         ]
       },
@@ -80,12 +88,14 @@ export const VOLCANOES = [
         id: 'taisho',
         name: 'Taishō 1914, subPlinian phase',
         p: { H: 15, logM: 11.35, phi: 1, sig: 2, suz: 4,
-             dir: 290, spd: 15, top: 45, shear: 0, K: 5000, rho: 1000, dur: 7200 },
+             dir: 290, spd: 15, top: 40, shear: 0, K: 5000, rho: 680, dur: 7200 },
         notes: [
           ['Column 15.0 ± 1.2 km above the vent', 'todde2017'],
-          ['Mass 2.25 × 10¹¹ kg from 0.09 km³ DRE (bulk 0.33 km³)', 'todde2017'],
-          ['Wind from the WNW, read from the ESE to SE dispersal', 'todde2017'],
-          ['Wind speeds, grain size and K assumed. The real deposit is polymodal']
+          ['Mass 2.2 ± 0.7 × 10¹¹ kg, from 0.33 ± 0.11 km³ of deposit (0.09 ± 0.03 km³ DRE)', 'todde2017'],
+          ['Deposit density 680 kg/m³: the measured mean is 676 ± 189, from 535 near the vent to 980 far from it', 'todde2017'],
+          ['Wind from the WNW, read from the ESE to SE dispersal. 40 m/s aloft: the clast method gives 38 to 41 m/s at the tropopause', 'todde2017'],
+          ['The 1914 vents were on the west and east flanks, 300 to 450 m above sea level, not at Minamidake, which is where this preset erupts from', 'todde2017'],
+          ['Wind at 2 km, grain size and K assumed. The real deposit is polymodal']
         ]
       }
     ]
@@ -93,7 +103,7 @@ export const VOLCANOES = [
   {
     id: 'shinmoedake',
     name: 'Shinmoedake',
-    vent: 'Kirishima volcano group',
+    vent: 'summit crater, Kirishima',
     lon: 130.88643, lat: 31.90965, ventZ: 1421,
     ventSrc: 'osm',
     refs: ['Miyakonojo', 'Takaharu'],
@@ -102,12 +112,13 @@ export const VOLCANOES = [
         id: 'subplinian2011',
         name: '26 and 27 January 2011 subplinian explosions',
         p: { H: 7, logM: 10.3, phi: 1.5, sig: 2, suz: 4,
-             dir: 315, spd: 15, top: 35, shear: 0, K: 3000, rho: 1000, dur: 7200 },
+             dir: 315, spd: 15, top: 70, shear: 0, K: 3000, rho: 1200, dur: 7200 },
         notes: [
           ['Plumes 6.4 to 7.3 km above the vent', 'maeno2014'],
-          ['Mass 2 × 10¹⁰ kg, within 1.4 to 2.5 × 10¹⁰ kg for the two main explosions together', 'nakada2013'],
-          ['Wind from the NW, read from the dispersal to the SE', 'maeno2014'],
-          ['Wind speeds, grain size and K assumed']
+          ['Mass 2 × 10¹⁰ kg, within 1.4 to 2.5 × 10¹⁰ kg for the explosions of the afternoon of 26 and the early morning of 27 January together', 'nakada2013'],
+          ['The published range for the same two explosions is wider, 1.4 to 4.1 × 10¹⁰ kg. Deposit density 1,200 kg/m³, the value used there to turn load into thickness', 'maeno2014'],
+          ['Wind from the NW, read from the dispersal to the SE. 70 m/s aloft: the local sounding peaks at 75 m/s at the tropopause, and 70 m/s fits the clast data best', 'maeno2014'],
+          ['Wind at 2 km, grain size and K assumed']
         ]
       }
     ]
@@ -127,7 +138,7 @@ export const VOLCANOES = [
              dir: 225, spd: 9, top: 30, shear: 45, K: 3000, rho: 1000, dur: 190 },
         notes: [
           ['Plume top 11.9 km above sea level, 10.7 km above the vent', 'tsuji2020'],
-          ['Mass 6.3 × 10⁸ kg, within 6.0 to 6.5 × 10⁸ kg in total', 'tsuji2020'],
+          ['Mass 6.3 × 10⁸ kg, within 6.0 to 6.5 × 10⁸ kg for all ejecta. About 4.5 × 10⁸ kg of that lies around the crater, pyroclastic density current deposits included, and about 1.8 × 10⁸ kg fell as ash to the north-east, so this preset over-feeds the far deposit', 'tsuji2020'],
           ['Grain size from the dry-sieved total distribution, mean −0.5 φ, sorting 2.3 φ', 'tsuji2020'],
           ['Wind from the SE to SW low down and from the west aloft, 2 to 39 m/s', 'tsuji2020'],
           ['Eruption 160 to 220 s long', 'tsuji2020'],
@@ -139,20 +150,23 @@ export const VOLCANOES = [
   {
     id: 'kuju',
     name: 'Kujū',
-    vent: 'Hosshōzan north flank',
+    vent: 'Hosshōzan east flank',
     lon: 131.2378, lat: 33.0985, ventZ: 1500,
     ventSrc: null,
     refs: ['Taketa', 'Kumamoto'],
     presets: [
       {
         id: 'oct1995',
-        name: 'October 1995 phreatic eruption',
+        name: '11 October 1995 phreatic eruption',
+        // dir 55 points the plume at Kumamoto city, which is on a bearing of
+        // 237 degrees from the vent. It was 80 while the note said the ash
+        // went west. The source says south-west.
         p: { H: 1, logM: 7.35, phi: 3.5, sig: 1.5, suz: 2,
-             dir: 80, spd: 8, top: 15, shear: 0, K: 1000, rho: 1000, dur: 3600 },
+             dir: 55, spd: 8, top: 15, shear: 0, K: 1000, rho: 1000, dur: 3600 },
         notes: [
-          ['Plume about 1,000 m high, on the evening of 11 October 1995', 'gsj1995kuju'],
-          ['Wind from the east: the ash fell to the west, reaching Kumamoto about 70 km away', 'gsj1995kuju'],
-          ['Mass 2.2 × 10⁷ kg, from a reported 2 × 10⁴ m³ of ash at 1,000 kg/m³. That volume is from secondary summaries of Japanese reports, not from a paper I could read, so treat it as a rough figure'],
+          ['Plume about 1,000 m high, from the evening of 11 October 1995. The vents are a line of craters about 400 m long on the east flank of Hosshōzan, at the place called Iōzan', 'hoshizumi1996'],
+          ['Wind from the NE: ash fell on Kujū, Kokonoe and Minami-Oguni and reached Kumamoto city, 70 km to the south-west', 'hoshizumi1996'],
+          ['Mass 2.2 × 10⁷ kg, about 2.2 × 10⁴ m³ of ash at 1,000 kg/m³. The figure comes from secondary summaries of Japanese reports, not from a paper I could read, so treat it as a rough one'],
           ['The eruption was phreatic, turning phreatomagmatic', 'gsj1995kuju'],
           ['Wind speeds, grain size and K assumed']
         ]

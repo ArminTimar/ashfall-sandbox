@@ -24,8 +24,17 @@ export function airRho(z) {
 }
 
 /**
- * Terminal settling velocity, three-regime scheme after Bonadonna et al. (1998):
- * Stokes below Re 6, an intermediate law to Re 500, Newton above.
+ * Terminal settling velocity, the three-regime scheme of Tephra2's
+ * part_fall_time, which credits Bonadonna et al. (1998): Stokes below Re 6, an
+ * intermediate law to Re 500, Newton above. Tephra2 uses the particle density
+ * where this uses the difference from air, which changes nothing measurable.
+ *
+ * The regime is chosen the way Tephra2 chooses it: Stokes if the Stokes
+ * velocity gives Re < 6, otherwise the intermediate law unless that gives
+ * Re >= 500. The Stokes and intermediate laws cross at Re 5.76, not 6, so just
+ * past the switch the intermediate law's own Re is still a little under 6.
+ * Requiring it to be 6 or more sent that sliver of sizes (about 110 um at sea
+ * level, 170 um at 10 km) to the Newton law, three times too fast.
  * @param {number} d  particle diameter, m
  * @param {number} rp particle density, kg/m^3
  * @param {number} ra air density, kg/m^3
@@ -35,8 +44,7 @@ export function vSettle(d, rp, ra) {
   const v1 = (G * d * d * dr) / (18 * MU);
   if ((ra * v1 * d) / MU < 6) return v1;
   const v2 = d * Math.cbrt((4 * G * G * dr * dr) / (225 * MU * ra));
-  const re2 = (ra * v2 * d) / MU;
-  if (re2 >= 6 && re2 < 500) return v2;
+  if ((ra * v2 * d) / MU < 500) return v2;
   return Math.sqrt((3.1 * G * d * dr) / ra);
 }
 

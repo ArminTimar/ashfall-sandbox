@@ -62,11 +62,15 @@ function computeVolcano(v) {
   }
 }
 
+// The combined deposit figures from the last repaint, kept so the readouts can
+// be redrawn for another volcano without painting the map again.
+let lastStats = { maxMM: 0, maxLoad: 0, area1: 0 };
+
 function repaint() {
   const fields = VOLCANOES.filter((v) => v.field).map((v) => v.field);
-  const maxMM = paintTexture(fields, showContours());
+  lastStats = paintTexture(fields, showContours());
   markTextureDirty();
-  updateReadout(maxMM);
+  updateReadout(lastStats);
 }
 
 function restartCloud(v) {
@@ -76,29 +80,61 @@ function restartCloud(v) {
   else seedCloud(v.cloud, v.p, budgetFor(v));
 }
 
-function recompute(v = selectedVolcano(), { reseed = true } = {}) {
+/**
+ * Re-seed a steady cloud after its volcano's parameters changed.
+ *
+ * When several volcanoes erupt, each one's particle count is its share of the
+ * largest eruption, so changing one mass changes what the others are owed.
+ * Those are re-seeded too, but only if their count really moved. An eruption
+ * run is never touched: it keeps the count it started with until Replay.
+ */
+function reseed(v) {
+  if (P.mode === 'eruption') return;
+  for (const x of VOLCANOES) {
+    if (!x.erupting || !x.cloud) continue;
+    const n = budgetFor(x);
+    if (x === v || x.cloud.clock.budget !== n) seedCloud(x.cloud, x.p, n);
+  }
+}
+
+function recompute(v = selectedVolcano(), opts = {}) {
   computeVolcano(v);
   repaint();
   syncLabels();
   // The deposit is a steady-state solution and jumps to the new parameters at
   // once, so a steady cloud is re-seeded to match. An eruption run is left
   // alone, so it can be watched while settings change. Replay starts a new one.
-  if (reseed && v.erupting && P.mode !== 'eruption') seedCloud(v.cloud, v.p, budgetFor(v));
+  if (opts.reseed !== false) reseed(v);
 }
 
 // While a slider is dragged the deposit updates every frame, but the cloud is
 // only re-seeded once the value has stopped changing for a moment. Seeding a
 // large cloud takes tens of milliseconds and would otherwise halve the frame
 // rate of the drag.
+//
+// Both steps remember which volcanoes they owe work to. Holding only the
+// latest one meant that switching volcano inside the 180 ms and changing a
+// value there cancelled the first volcano's re-seed for good.
 let pending = null, reseedTimer = null;
+const toCompute = new Set(), toSeed = new Set();
 function schedule() {
   syncLabels();
   const v = selectedVolcano();
-  if (pending) cancelAnimationFrame(pending);
-  pending = requestAnimationFrame(() => { pending = null; recompute(v, { reseed: false }); });
+  toCompute.add(v);
+  toSeed.add(v);
+  if (!pending) {
+    pending = requestAnimationFrame(() => {
+      pending = null;
+      for (const x of toCompute) computeVolcano(x);
+      toCompute.clear();
+      repaint();
+      syncLabels();
+    });
+  }
   clearTimeout(reseedTimer);
   reseedTimer = setTimeout(() => {
-    if (v.erupting && v.cloud && P.mode !== 'eruption') seedCloud(v.cloud, v.p, budgetFor(v));
+    for (const x of toSeed) reseed(x);
+    toSeed.clear();
   }, 180);
 }
 
@@ -140,6 +176,9 @@ const dataUrl = (f) => (DATA_V ? `${f}?v=${DATA_V}` : f);
 
 P.theme = readTheme();
 document.documentElement.dataset.theme = P.theme;
+// The map panel too, so the loading screen already has the saved theme's
+// colours. scene.js sets this again once the scene exists.
+if ($('scene')) $('scene').dataset.theme = P.theme;
 
 /** Say what the page is waiting for, until the scene replaces it. */
 function loadingText(t) {
@@ -149,6 +188,10 @@ function loadingText(t) {
 
 // The map layers are optional decoration for a physics model, so they never
 // block the terrain. If they fail to load the sandbox still runs without roads.
+// `stage` records how far the start-up got, so a failure is reported as what
+// it was. Everything used to be blamed on the terrain, including a browser
+// with WebGL switched off.
+let stage = 'load';
 Promise.all([
   loadTerrain(dataUrl('data/terrain.png'), dataUrl('data/terrain.json')),
   loadVectors(dataUrl('data/vectors.json')).catch((err) => {
@@ -156,6 +199,7 @@ Promise.all([
     return null;
   })
 ]).then(([, vectors]) => {
+  stage = 'build';
   loadingText('Building the surface…');
   initTexture();
   initScene($('scene'), { onFocusChange: syncFocus });
@@ -173,7 +217,9 @@ Promise.all([
     onModel: schedule,
     onExaggeration: applyExaggeration,
     onPreset: (v) => recompute(v),
-    onSelect: () => { syncLabels(); updateReadout(); repaint(); },
+    // Nothing on the map changes when another volcano is selected, only which
+    // two places and which mass balance the readouts show.
+    onSelect: () => updateReadout(lastStats),
     onErupt: (v) => {
       computeVolcano(v);
       repaint();
@@ -186,11 +232,15 @@ Promise.all([
     onSave: saveImage,
     onView: setView,
     onReplay: () => { for (const v of VOLCANOES) restartCloud(v); },
-    onToggle: () => {
+    // Two separate switches. They used to share one handler, so turning the
+    // isopachs on or off also re-seeded every cloud and, in eruption mode,
+    // started the run again from zero.
+    onContours: repaint,
+    onPlume: () => {
       const on = $('t-part').checked;
       setPlumeVisible(on);
+      // Clouds are not stepped while hidden, so start them fresh when shown.
       if (on) for (const v of VOLCANOES) restartCloud(v);
-      repaint();
     },
     onLayer: (layers, on) => { for (const id of layers) setVectorLayer(id, on); },
     onLabels: setLabelClasses
@@ -205,6 +255,11 @@ Promise.all([
   // automated versions.
   window.__ash = { P, VOLCANOES, orbit, recompute, repaint, debugStats, setView, flyTo };
 }).catch((err) => {
-  $('loading').textContent = 'Terrain failed to load. Is the page being served over http?';
+  const el = $('loading');
+  el.classList.remove('gone');
+  el.textContent = stage === 'load'
+    ? 'Terrain failed to load. Is the page being served over http?'
+    : 'The map could not be drawn. This browser may have WebGL switched off. '
+      + 'The browser console has the details.';
   console.error(err);
 });

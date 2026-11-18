@@ -23,7 +23,10 @@ const forms = [
   ['2.5', 2.5], ['-3', -3], ['.5', 0.5], ['2.5e10', 2.5e10], ['2.5E10', 2.5e10],
   ['2.5×10^10', 2.5e10], ['2.5x10^10', 2.5e10], ['2.5*10^10', 2.5e10],
   ['2.5 × 10¹⁰', 2.5e10], ['2.5·10⁻³', 2.5e-3], ['10^8', 1e8], ['10⁸', 1e8],
-  ['−15', -15], ['2,5', 2.5], ['2,500', 2500], ['20,000', 20000], ['1,234,567', 1234567]
+  ['−15', -15], ['2,5', 2.5], ['2,500', 2500], ['20,000', 20000], ['1,234,567', 1234567],
+  // A decimal comma followed by three digits is still a decimal comma when
+  // the whole part cannot be a thousands group.
+  ['0,125', 0.125], ['0,5', 0.5], ['2,5e10', 2.5e10], ['1234,567', 1234.567], ['2,500.5', 2500.5]
 ];
 for (const [s, v] of forms) {
   const q = splitQuantity(s);
@@ -57,6 +60,7 @@ expect('phi 250 um',      parsePhi('250um'), 2);
 expect('phi 2 mm',        parsePhi('2 mm'), -1);
 expect('phi 63 µm',       parsePhi('62.5 µm'), 4);
 expect('phi zero size',   parsePhi('0 mm'), null);
+expect('phi 0,125 mm',    parsePhi('0,125 mm'), 3);
 
 // --- direction ---------------------------------------------------------------
 expect('dir degrees',     parseDirection('270'), 270);

@@ -12,9 +12,8 @@ Notes taken from reading the source of both, not the manuals.
 | | |
 | --- | --- |
 | Kernel | Suzuki/Connor analytical advection–diffusion, summed over release heights and grain sizes |
-| Settling | Reynolds-dependent three-regime terminal velocity through a density-stratified atmosphere |
-| Grain size | Gaussian in φ, particle density interpolated across the size range |
-| Column | Suzuki-style mass distribution over release height |
+| Settling | Reynolds-dependent three-regime terminal velocity, switched at Re 6 and Re 500, through an exponential atmosphere with an 8200 m scale height |
+| Grain size | Gaussian in φ, particle density interpolated linearly with φ |
 | Diffusion | Same coarse-particle law and the same plume head-start τ, matched to their constants, so `K` is directly comparable |
 
 A note on that last row. Tephra2's kernel is `(M/πσ)·exp(−r²/σ)` normalised by
@@ -29,6 +28,20 @@ The plume head start comes from `tephra2_calc.c`:
 T[i][j].plume_diffusion_coarse_particle =
     0.0032 * (ht_above_vent * ht_above_vent) / erupt->diffusion_coefficient;
 ```
+
+### Different in detail
+
+Checked against `common_src/tephra2_calc.c` and `parameters.h`.
+
+| | Tephra2 | Here |
+| --- | --- | --- |
+| Column | `plume_pdf0` uniform above a set fraction of the column, `plume_pdf1` log-normal, `plume_pdf2` beta. No Suzuki function | Suzuki, `(1 − ζ)·exp(A(ζ − 1))` |
+| Air | 1.293 kg/m³ at sea level, viscosity 1.8325 × 10⁻⁵ Pa·s | 1.225 kg/m³, 1.8 × 10⁻⁵ Pa·s |
+| Particle density | Pumice density at φ −1 and coarser, lithic density at φ 7 and finer, both set by the user | 1200 kg/m³ at φ −5 to 2400 at φ 5, fixed |
+| Buoyancy | Settling laws use the particle density | They use particle minus air density |
+
+The air values make grains here settle 2 to 3% faster. An earlier version of
+this page listed the column under "the same in both", which was wrong.
 
 ### Tephra2 has, this does not
 
